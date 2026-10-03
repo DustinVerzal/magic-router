@@ -85,4 +85,9 @@ export const effortFor = (s: number): Effort => EFFORTS.find(([min]) => s >= min
 
 export const modelFor = (s: number): string => (s >= FABLE_AT ? MODELS.fable : s >= OPUS_AT ? MODELS.opus : MODELS.sonnet)
 
+// The model to send when the route picked `chosen` and the engine asked for `asked`. A session already
+// on a variant of the chosen model, such as the 1M-context `claude-opus-5-5[1m]`, keeps its variant:
+// sending the bare id would quietly drop the larger context window.
+export const keepVariant = (chosen: string, asked: string): string => (asked.startsWith(`${chosen}[`) ? asked : chosen)
+
 export const isFollowUp = (text: string) => text.trim().split(/\s+/).length < FOLLOW_UP_WORDS

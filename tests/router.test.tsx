@@ -122,3 +122,40 @@ test('the band shows the route and nothing about the classification', async ($: 
   await ui.press({ key: 'hide' })
   expect(await ui.find({ text: /opus 5\.5/ })).toBeUndefined()
 })
+
+test('a session on a variant of the chosen model keeps its variant', async ($: any, on) => {
+  const { sent } = engine(on)
+  const LONG = { model: 'claude-opus-5-5[1m]', effort: 'medium' } as const
+
+  // The route picks Opus: the session is already on its 1M-context variant, which must survive.
+  await submit($, FIX.scheduler.text)
+  await step($, LONG)
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5[1m]', effort: 'max' })
+})
+
+test('a different model than the session variant is still sent as chosen', async ($: any, on) => {
+  const { sent } = engine(on)
+
+  await submit($, FIX.typo.text)
+  await step($, { model: 'claude-opus-5-5[1m]', effort: 'medium' })
+  expect(sent.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'low' })
+})
+
+test('model: keep routes effort only and never rewrites the model', { options: { model: 'keep' } }, async ($: any, on) => {
+  const { sent } = engine(on)
+  const LONG = { model: 'claude-opus-5-5[1m]', effort: 'medium' } as const
+
+  // A first prompt that would pick Sonnet under routing leaves the model alone.
+  await submit($, FIX.typo.text)
+  await step($, LONG)
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5[1m]', effort: 'low' })
+
+  await submit($, FIX.scheduler.text)
+  await step($, LONG)
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5[1m]', effort: 'max' })
+
+  // The band says so instead of naming a model.
+  const ui = await $.ui.mount({ plugin: 'model-router', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 6 } })
+  expect(await ui.find({ text: /session model/ })).toBeDefined()
+  await ui.unmount()
+})
