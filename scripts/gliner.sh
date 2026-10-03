@@ -60,8 +60,7 @@ case "${1:-}" in
   start) start ;;
   # Any copy: a marketplace install runs the daemon from the plugin cache, not this checkout.
   stop) pkill -f server/classifier.py && echo stopped || echo "not running" ;;
-  # shellcheck disable=SC2015  # echo cannot fail here
-  status) health && echo || { echo "not running"; exit 1; } ;;
+  status) if health; then echo; else echo "not running"; exit 1; fi ;;
   check) need_uv; uv run --script "$SERVER" --check ;;
   logs) mkdir -p "$(dirname "$LOG")"; touch "$LOG"; tail -f "$LOG" ;;
   *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
