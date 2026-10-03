@@ -16,9 +16,11 @@ const isHidden = atom({ plugin: 'model-router', key: 'isHidden' } as const, fals
 // What a person sent; task notifications, peers and plugins keep the current route.
 const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
 
-type Classified = { choose: Probs; flags: Probs; ms: number }
+// effort comes back only from a daemon with a tuned adapter (scripts/tune.py).
+type Classified = { choose: Probs; flags: Probs; effort?: Probs; ms: number }
 
 const LADDER = EFFORTS.map(([, e]) => e).reverse()
+const top = (p: Probs) => Object.keys(p).reduce((a, b) => (p[b] > p[a] ? b : a)) as Effort
 // ponytail: theme keys, so the colours follow light and dark themes; low and medium share green
 const HEAT: Record<Effort, string> = { low: 'success', medium: 'success', high: 'warning', xhigh: 'error', max: 'error' }
 const pct = (p: number) => `${Math.round(p * 100)}%`
@@ -59,7 +61,7 @@ export const register: Register = on => {
       .fetch(`${DAEMON}/classify`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS }),
+        body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS, effort: LADDER }),
       })
       .then(
         r => (r.ok ? JSON.parse(r.text) : undefined),
@@ -78,7 +80,8 @@ export const register: Register = on => {
     const last = await read($, route)
     const chosen: Route = {
       model: picked ? (last?.model ?? null) : modelFor(s),
-      effort: effortFor(s),
+      // An adapter tuned on your own prompts beat the score on held-out ones before it was installed.
+      effort: found.effort ? top(found.effort) : effortFor(s),
       score: s,
       task: found.choose,
       signals: found.flags,

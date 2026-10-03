@@ -13,8 +13,8 @@ const FIX = {
 
 const SESSION = { model: 'claude-opus-5-5', effort: 'medium' } as const
 
-// The engine beneath the plugin: a daemon answering from FIX (or down), and a model that records each request.
-function engine(on: On) {
+// The engine beneath the plugin: a daemon answering from FIX plus `extra` (or down), and a model that records each request.
+function engine(on: On, extra: object = {}) {
   const daemon = { isUp: true }
   const sent: { model: string; effort: unknown }[] = []
   on('http.fetch', ($, e) => {
@@ -22,7 +22,7 @@ function engine(on: On) {
     if (e.url.endsWith('/health')) return { value: { status: 200, ok: true, headers: {}, text: '{"ready": true}' } }
     const { text } = JSON.parse(e.init?.body ?? '{}')
     const found = Object.values(FIX).find(f => f.text === text)
-    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(found) } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify({ ...found, ...extra }) } }
   })
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
@@ -73,6 +73,14 @@ test('the first prompt picks the model for the session; every prompt picks its e
 
   await step($, { ...SESSION, agentId: 'a1' })
   expect(sent.at(-1)).toEqual(SESSION)
+})
+
+test("a tuned daemon's effort answer wins over the score; the score still picks the model", async ($: any, on) => {
+  const { sent } = engine(on, { effort: { low: 0.1, medium: 0.15, high: 0.6, xhigh: 0.1, max: 0.05 } })
+
+  await submit($, FIX.typo.text)
+  await step($)
+  expect(sent.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
 })
 
 test('a classifier down on the first prompt keeps the session model for good', async ($: any, on) => {
