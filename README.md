@@ -1,14 +1,33 @@
+<div align="center">
+
 # model-router
+
+**Sonnet or Opus for the session. An effort level for every prompt.**<br>
+Picked by a classifier that runs on your machine.
+
+[![Claude Code 2.1.287+](https://img.shields.io/badge/Claude_Code-2.1.287%2B-1b1b20?style=flat-square)](#requirements)
+[![macOS · Linux](https://img.shields.io/badge/runs_on-macOS_·_Linux-1b1b20?style=flat-square)](#requirements)
+[![MIT license](https://img.shields.io/badge/license-MIT-1b1b20?style=flat-square)](LICENSE)
+
+<br>
+
+<img src=".github/assets/session.svg" width="100%" alt="One session with the router band under each prompt. The first prompt, about designing a sharded job queue, scores 1.92 and picks Opus 5.5 at xhigh effort in 327 ms. A short 'go ahead' keeps xhigh. A prompt to add retry with backoff scores 0.57 and drops to medium, and fixing a typo scores 0.24 and drops to low, while the model stays on Opus 5.5.">
+
+<sub>One session. Scores and latencies are real classifier output for these prompts.</sub>
+
+<br>
+
+[Install](#install) · [First run](#first-run) · [How it routes](#how-a-prompt-is-routed) · [Troubleshooting](#troubleshooting)
+
+</div>
+
+<br>
 
 A Claude Code mod that routes each session to **Sonnet 5.5 or Opus 5.5** and each prompt to an **effort level**, using [GLiNER2.5-Decide](https://huggingface.co/fastino/GLiNER2.5-Decide) running locally.
 
 - **The model is picked once**, from the session's first prompt. Switching models mid-conversation throws away the prompt cache, so the model stays fixed after that.
 - **Effort is picked again on every prompt.** Short replies ("yes", "go ahead") keep the last effort.
 - **A band above the prompt** shows the model, the effort, how long classifying took, and last turn's cache-read %.
-
-```
-router  opus 5.5  effort ▰▰▰▰▰ max  326ms · cache 94% read  [ hide ]
-```
 
 ## Requirements
 
@@ -28,7 +47,9 @@ In Claude Code:
 
 Restart Claude Code. That's all. The first session starts the classifier itself (see [First run](#first-run)).
 
-### Warm it up first (optional)
+<details>
+<summary><b>Warm it up first</b>: skip the first-run download wait</summary>
+<br>
 
 Without this step, your first session waits while torch installs and the weights download. To do that ahead of time:
 
@@ -39,7 +60,11 @@ claude-router/scripts/gliner.sh setup
 
 `setup` installs uv if it's missing, installs torch and gliner2, downloads the weights (~1.7 GB), and leaves the daemon running. The downloads land in uv's and Hugging Face's shared caches, so the installed plugin reuses them; the clone is only needed to run the script.
 
-### From source
+</details>
+
+<details>
+<summary><b>From source</b>: load a checkout to hack on it</summary>
+<br>
 
 To hack on it, load a checkout for one session instead of installing:
 
@@ -50,13 +75,17 @@ claude --plugin-dir ./claude-router
 
 Edits to `hooks/` reload while the session runs.
 
+</details>
+
 ## First run
 
 The first session after a reboot starts the classifier daemon (`server/classifier.py`, on `127.0.0.1:8765`). The daemon keeps running after the session ends, and every later session reuses it.
 
-- **First run ever:** uv installs torch and gliner2, and the weights download (~1.7 GB). The band shows `classifier unreachable` until this finishes, and the session keeps its own model.
-- **First session after a reboot:** the model loads in about 10 s, and the first prompt waits for it.
-- **Every later prompt:** about 0.3 s of CPU.
+| When | What happens |
+|---|---|
+| **First run ever** | uv installs torch and gliner2, and the weights download (~1.7 GB). The band shows `classifier unreachable` until this finishes, and the session keeps its own model. |
+| **First session after a reboot** | The model loads in about 10 s, and the first prompt waits for it. |
+| **Every later prompt** | About 0.3 s of CPU. |
 
 ## Managing the classifier
 
@@ -73,25 +102,28 @@ The log is at `~/.cache/model-router/classifier.log`. Without a checkout, stop t
 
 ## How a prompt is routed
 
-All routing policy lives in `hooks/route.ts`. The daemon only answers the questions the mod sends it.
+All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only answers the questions the mod sends it.
 
 1. **Task type**: one probability distribution over seven labels. Each label maps to an eval family of the [Artificial Analysis Intelligence Index v4.1](https://artificialanalysis.ai/articles/artificial-analysis-intelligence-index-v4-1):
 
    | Label | Eval family |
    |---|---|
-   | agentic_coding | Terminal-Bench |
-   | scientific_coding | SciCode |
-   | tool_use | τ³-Bench |
-   | knowledge_work | GDPval-AA |
-   | long_context | AA-LCR |
-   | knowledge_qa | AA-Omniscience, GPQA |
-   | reasoning | HLE, CritPt |
+   | `agentic_coding` | Terminal-Bench |
+   | `scientific_coding` | SciCode |
+   | `tool_use` | τ³-Bench |
+   | `knowledge_work` | GDPval-AA |
+   | `long_context` | AA-LCR |
+   | `knowledge_qa` | AA-Omniscience, GPQA |
+   | `reasoning` | HLE, CritPt |
 
-2. **Complexity**: seven independent yes/no signals, such as multi_file, planning, deep_reasoning, large_scope, and quick.
+2. **Complexity**: seven independent yes/no signals, such as `multi_file`, `planning`, `deep_reasoning`, `large_scope`, and `quick`.
 3. **Score**: `Σ weight × P(signal) + Σ bias × P(task)`. The task bias leans toward Opus where its lead on the matching evals is widest.
 4. **Effort and model**: the score maps to `low < 0.4 ≤ medium < 1.0 ≤ high < 1.5 ≤ xhigh < 2.0 ≤ max`. On the first prompt, a score ≥ 1.1 picks Opus; anything lower picks Sonnet.
 
-The weights and thresholds were tuned by eye on 15 prompts, so retune them on your own traffic: fork the repo, edit `hooks/route.ts`, and load your fork with `--plugin-dir`.
+<img src=".github/assets/scale.svg" width="100%" alt="The score scale. Effort bands run low below 0.4, medium to 1.0, high to 1.5, xhigh to 2.0, and max above. A dashed line at 1.1 splits Sonnet from Opus. The session's prompts sit at 0.24 (fix the typo, low), 0.57 (add retry and tests, medium), and 1.92 (design the job queue, xhigh).">
+
+> [!NOTE]
+> The weights and thresholds were tuned by eye on 15 prompts, so retune them on your own traffic: fork the repo, edit `hooks/route.ts`, and load your fork with `--plugin-dir`.
 
 ## When it stands aside
 

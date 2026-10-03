@@ -35,6 +35,7 @@ export const register: Register = on => {
     )
     if (!isUp) {
       const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/model-router/classifier.log`
+      // `;` not `&&`: `a && b &` backgrounds a subshell that keeps run's stdout pipe open, holding it until its 30s timeout.
       await $.process.run([
         'sh',
         '-c',
