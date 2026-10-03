@@ -7,7 +7,7 @@ Picked by a classifier that runs on your machine.
 
 [![version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FDustinVerzal%2Fmagic-router%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&style=flat-square&color=1b1b20)](.claude-plugin/plugin.json)
 [![Claude Code 2.1.287+](https://img.shields.io/badge/Claude_Code-2.1.287%2B-1b1b20?style=flat-square)](#requirements)
-[![macOS · Linux](https://img.shields.io/badge/runs_on-macOS_·_Linux-1b1b20?style=flat-square)](#requirements)
+[![macOS · Linux · Windows](https://img.shields.io/badge/runs_on-macOS_·_Linux_·_Windows-1b1b20?style=flat-square)](#requirements)
 [![MIT license](https://img.shields.io/badge/license-MIT-1b1b20?style=flat-square)](LICENSE)
 
 <br>
@@ -33,8 +33,8 @@ A Claude Code mod that routes each session to **Sonnet 5.5 or Opus 5.5** and eac
 ## Requirements
 
 - Claude Code **2.1.287 or later** (`claude --version`)
-- macOS or Linux
-- `curl`. If [`uv`](https://docs.astral.sh/uv/) isn't installed, the first session installs it to `~/.local/bin` (no shell profile edits), and uv fetches a suitable Python (3.10–3.13) by itself.
+- macOS, Linux or Windows (PowerShell 5.1+; Windows support is new and untested on real machines, so please report issues)
+- `curl` (macOS/Linux). If [`uv`](https://docs.astral.sh/uv/) isn't installed, the first session installs it to `~/.local/bin` (`%USERPROFILE%\.local\bin` on Windows; no shell profile edits), and uv fetches a suitable Python (3.10–3.13) by itself.
 - About 2 GB of free RAM while the classifier runs, and about 2 GB of disk for torch and the weights
 
 ## Install
@@ -56,7 +56,8 @@ Without this step, your first session waits while torch installs and the weights
 
 ```sh
 git clone https://github.com/DustinVerzal/magic-router
-magic-router/scripts/gliner.sh setup
+magic-router/scripts/gliner.sh setup          # macOS / Linux
+powershell -File magic-router\scripts\gliner.ps1 setup   # Windows
 ```
 
 `setup` installs uv if it's missing, installs torch and gliner2, downloads the weights (~1.7 GB), and leaves the daemon running. The downloads land in uv's and Hugging Face's shared caches, so the installed plugin reuses them; the clone is only needed to run the script.
@@ -104,6 +105,8 @@ The first session after a reboot starts the classifier daemon (`server/classifie
 
 ## Managing the classifier
 
+On Windows, use `powershell -File scripts\gliner.ps1 <command>` instead of `scripts/gliner.sh`; the commands are the same. Run these from a checkout (`git clone`): a marketplace install keeps the scripts in the plugin cache.
+
 ```sh
 scripts/gliner.sh setup    # install uv if missing, install torch + gliner2, download the weights, start
 scripts/gliner.sh start    # start the daemon (if it isn't up) and wait until the model is loaded
@@ -113,7 +116,7 @@ scripts/gliner.sh check    # run the classifier's offline self-check
 scripts/gliner.sh logs     # follow the daemon log
 ```
 
-The log is at `~/.cache/model-router/classifier.log`. Without a checkout, stop the daemon with `pkill -f server/classifier.py`.
+The log is at `~/.cache/model-router/classifier.log`. Without a checkout, stop the daemon with `pkill -f server/classifier.py` (Windows: end the `python`/`uv` process running `classifier.py` in Task Manager).
 
 ## How a prompt is routed
 
