@@ -5,6 +5,7 @@
 **Sonnet or Opus for the session. An effort level for every prompt.**<br>
 Picked by a classifier that runs on your machine.
 
+[![version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FDustinVerzal%2Fmagic-router%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=version&style=flat-square&color=1b1b20)](.claude-plugin/plugin.json)
 [![Claude Code 2.1.287+](https://img.shields.io/badge/Claude_Code-2.1.287%2B-1b1b20?style=flat-square)](#requirements)
 [![macOS · Linux](https://img.shields.io/badge/runs_on-macOS_·_Linux-1b1b20?style=flat-square)](#requirements)
 [![MIT license](https://img.shields.io/badge/license-MIT-1b1b20?style=flat-square)](LICENSE)
