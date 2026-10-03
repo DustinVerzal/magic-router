@@ -1,0 +1,178 @@
+import { atom, read, update } from 'claude-code'
+import type { Register } from 'claude-code'
+
+import type { Probs, Route } from '../types'
+import { SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
+
+const DAEMON = 'http://127.0.0.1:8765' // ponytail: fixed port, matches ROUTER_PORT's default in server/classifier.py
+
+const isPicked = atom({ plugin: 'model-router', key: 'isPicked' } as const, false)
+const route = atom({ plugin: 'model-router', key: 'route' } as const, null)
+const baseline = atom({ plugin: 'model-router', key: 'baseline' } as const, null)
+const note = atom({ plugin: 'model-router', key: 'note' } as const, null)
+const cache = atom({ plugin: 'model-router', key: 'cache' } as const, null)
+const isHidden = atom({ plugin: 'model-router', key: 'isHidden' } as const, false)
+
+// What a person sent; task notifications, peers and plugins keep the current route.
+const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
+
+type Classified = { choose: Probs; flags: Probs; ms: number }
+
+const pct = (p: number) => `${Math.round(p * 100)}%`
+const top = (p: Probs, n: number) =>
+  Object.entries(p)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([k, v]) => `${k} ${pct(v)}`)
+    .join(' · ')
+const short = (model: string) => model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2')
+
+export const register: Register = on => {
+  // Start the shared daemon if no session has: it outlives this one, so only the first session after a
+  // reboot pays the model load (~10s; the first run ever also installs torch and downloads the weights).
+  on('session.start', async ($, e, next) => {
+    const started = await next(e)
+    const isUp = await $.http.fetch(`${DAEMON}/health`).then(
+      r => r.ok,
+      () => false,
+    )
+    if (!isUp) {
+      const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/model-router/classifier.log`
+      await $.process.run([
+        'sh',
+        '-c',
+        'mkdir -p "$(dirname "$2")"; nohup uv run --script "$1" </dev/null >>"$2" 2>&1 &',
+        'sh',
+        `${$.plugin.root}/server/classifier.py`,
+        log,
+      ])
+    }
+    return started
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    if (!ROUTED_ORIGINS.has(e.origin.kind) || e.text.startsWith('/')) return next(e)
+
+    const picked = await read($, isPicked)
+    if (picked && isFollowUp(e.text)) return next(e)
+
+    const found: Classified | undefined = await $.http
+      .fetch(`${DAEMON}/classify`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS }),
+      })
+      .then(
+        r => (r.ok ? JSON.parse(r.text) : undefined),
+        () => undefined,
+      )
+
+    if (found === undefined) {
+      // A first prompt the classifier missed still settles the model (the session's own): picking one
+      // later would switch models mid-conversation.
+      await update($, isPicked, () => true)
+      await update($, note, () => `classifier unreachable at ${DAEMON}; see ~/.cache/model-router/classifier.log`)
+      return next(e)
+    }
+
+    const s = score(found.choose, found.flags)
+    const last = await read($, route)
+    const chosen: Route = {
+      model: picked ? (last?.model ?? null) : modelFor(s),
+      effort: effortFor(s),
+      score: s,
+      task: found.choose,
+      signals: found.flags,
+      ms: found.ms,
+    }
+    await update($, isPicked, () => true)
+    await update($, route, () => chosen)
+    await update($, isHidden, () => false)
+    if ((await read($, note))?.startsWith('classifier')) await update($, note, () => null)
+    return next(e)
+  })
+
+  // The main loop's requests only: subagents keep the model and effort they were given.
+  on('turn.step', async function* ($, e, next) {
+    const r = await read($, route)
+    if (e.agentId !== undefined || r === null) return yield* next(e)
+
+    const was = await read($, baseline)
+    const asked = { model: e.model, effort: e.effort ?? null }
+    if (was === null) {
+      await update($, baseline, () => asked)
+    } else if (was.model !== asked.model || was.effort !== asked.effort) {
+      // /model, /effort or a fallback changed what the engine asks for: stand aside for the session.
+      if ((await read($, note)) === null) await update($, note, () => `stood aside: ${asked.model} chosen by hand`)
+      return yield* next(e)
+    }
+    return yield* next({ ...e, model: r.model ?? e.model, effort: r.effort })
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined && e.usage !== undefined) {
+      const u = e.usage
+      await update($, cache, () => ({
+        read: u.cache_read_input_tokens,
+        written: u.cache_creation_input_tokens,
+        uncached: u.input_tokens,
+      }))
+    }
+    return next(e)
+  })
+
+  // A /clear starts a new conversation: the next prompt picks a model again.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') {
+      await update($, isPicked, () => false)
+      await update($, route, () => null)
+      await update($, baseline, () => null)
+      await update($, note, () => null)
+      await update($, cache, () => null)
+    }
+    return next(e)
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const [r, n, c] = [await read($, route), await read($, note), await read($, cache)]
+    if (e.props.hasSurvey || (r === null && n === null) || (await read($, isHidden))) return next(e)
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const total = c === null ? 0 : c.read + c.written + c.uncached
+
+    return (
+      <Box flexDirection="column">
+        <Box flexDirection="row" gap={1}>
+          <Text bold>router</Text>
+          {r !== null && (
+            <Text>
+              {r.model === null ? 'session model' : short(r.model)} · effort {r.effort}
+            </Text>
+          )}
+          {r !== null && (
+            <Text dimColor>
+              score {r.score.toFixed(2)} · {r.ms}ms
+            </Text>
+          )}
+          {total > 0 && <Text dimColor>· cache {pct(c!.read / total)} read</Text>}
+          <Button key="hide" label="hide" onPress={() => update($, isHidden, () => true)} />
+        </Box>
+        {r !== null && (
+          <Text dimColor wrap="truncate">
+            task {top(r.task, 3)}
+          </Text>
+        )}
+        {r !== null && (
+          <Text dimColor wrap="truncate">
+            signals {top(r.signals, 3)}
+          </Text>
+        )}
+        {n !== null && (
+          <Text color="warning" wrap="truncate">
+            {n}
+          </Text>
+        )}
+      </Box>
+    )
+  })
+}

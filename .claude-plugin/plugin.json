@@ -1,0 +1,7 @@
+{
+  "name": "model-router",
+  "version": "0.1.0",
+  "description": "Routes each session to Sonnet 5.5 or Opus 5.5 and each prompt to an effort level, using a local GLiNER2.5 classifier",
+  "author": { "name": "Dustin Verzal" },
+  "types": "./types/index.d.ts"
+}
