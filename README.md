@@ -77,6 +77,20 @@ Edits to `hooks/` reload while the session runs.
 
 </details>
 
+## Updating
+
+Updates ship when the plugin version is bumped, which happens automatically on every merge to `main`. Third-party marketplaces don't auto-update by default, so turn it on once:
+
+1. Run `/plugin` and open the **Marketplaces** tab.
+2. Select **magic-router** and choose **Enable auto-update**.
+
+Claude Code then pulls new versions at startup and asks you to restart or run `/reload-plugins`. To update by hand instead:
+
+```
+/plugin marketplace update magic-router
+/plugin update model-router@magic-router
+```
+
 ## First run
 
 The first session after a reboot starts the classifier daemon (`server/classifier.py`, on `127.0.0.1:8765`). The daemon keeps running after the session ends, and every later session reuses it.
