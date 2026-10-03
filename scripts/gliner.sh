@@ -10,6 +10,7 @@
 #   scripts/gliner.sh logs     follow the daemon log
 set -eu
 
+# shellcheck disable=SC1007  # empty CDPATH is deliberate
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 SERVER="$ROOT/server/classifier.py"
 URL=http://127.0.0.1:8765 # ponytail: fixed, matches DAEMON in hooks/register.tsx
@@ -59,6 +60,7 @@ case "${1:-}" in
   start) start ;;
   # Any copy: a marketplace install runs the daemon from the plugin cache, not this checkout.
   stop) pkill -f server/classifier.py && echo stopped || echo "not running" ;;
+  # shellcheck disable=SC2015  # echo cannot fail here
   status) health && echo || { echo "not running"; exit 1; } ;;
   check) need_uv; uv run --script "$SERVER" --check ;;
   logs) mkdir -p "$(dirname "$LOG")"; touch "$LOG"; tail -f "$LOG" ;;
