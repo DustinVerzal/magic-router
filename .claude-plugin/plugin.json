@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "description": "Routes each session to Sonnet 5.5 or Opus 5.5 and each prompt to an effort level, using a local GLiNER2.5 classifier",
   "author": { "name": "Dustin Verzal", "url": "https://github.com/DustinVerzal" },
-  "homepage": "https://github.com/DustinVerzal/claude-router",
-  "repository": "https://github.com/DustinVerzal/claude-router",
+  "homepage": "https://github.com/DustinVerzal/magic-router",
+  "repository": "https://github.com/DustinVerzal/magic-router",
   "license": "MIT",
   "keywords": ["routing", "model-selection", "effort", "gliner"],
   "types": "./types/index.d.ts"

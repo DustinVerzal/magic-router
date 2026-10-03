@@ -2,7 +2,7 @@
 # requires-python = ">=3.10,<3.14"
 # dependencies = ["gliner2[local]>=2,<3"]
 # ///
-"""GLiNER2.5-Decide classifier daemon for claude-router, shared by every session.
+"""GLiNER2.5-Decide classifier daemon for magic-router, shared by every session.
 
 GET  /health    {"ready": bool, "model": str}
 POST /classify  {"text", "choose": {label: description}, "flags": {label: description}}
@@ -107,5 +107,5 @@ if __name__ == "__main__":
     except OSError:
         sys.exit(0)
     threading.Thread(target=load, daemon=True).start()
-    print(f"claude-router classifier on 127.0.0.1:{PORT}", flush=True)
+    print(f"magic-router classifier on 127.0.0.1:{PORT}", flush=True)
     server.serve_forever()

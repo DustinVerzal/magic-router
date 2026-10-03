@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "claude-router",
+  "name": "magic-router",
   "description": "Routes Claude Code sessions to Sonnet or Opus and prompts to an effort level with a local classifier.",
   "owner": {
     "name": "Dustin Verzal",

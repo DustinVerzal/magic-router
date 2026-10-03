@@ -41,8 +41,8 @@ A Claude Code mod that routes each session to **Sonnet 5.5 or Opus 5.5** and eac
 In Claude Code:
 
 ```
-/plugin marketplace add DustinVerzal/claude-router
-/plugin install model-router@claude-router
+/plugin marketplace add DustinVerzal/magic-router
+/plugin install model-router@magic-router
 ```
 
 Restart Claude Code. That's all. The first session starts the classifier itself (see [First run](#first-run)).
@@ -54,8 +54,8 @@ Restart Claude Code. That's all. The first session starts the classifier itself 
 Without this step, your first session waits while torch installs and the weights download. To do that ahead of time:
 
 ```sh
-git clone https://github.com/DustinVerzal/claude-router
-claude-router/scripts/gliner.sh setup
+git clone https://github.com/DustinVerzal/magic-router
+magic-router/scripts/gliner.sh setup
 ```
 
 `setup` installs uv if it's missing, installs torch and gliner2, downloads the weights (~1.7 GB), and leaves the daemon running. The downloads land in uv's and Hugging Face's shared caches, so the installed plugin reuses them; the clone is only needed to run the script.
@@ -69,8 +69,8 @@ claude-router/scripts/gliner.sh setup
 To hack on it, load a checkout for one session instead of installing:
 
 ```sh
-git clone https://github.com/DustinVerzal/claude-router
-claude --plugin-dir ./claude-router
+git clone https://github.com/DustinVerzal/magic-router
+claude --plugin-dir ./magic-router
 ```
 
 Edits to `hooks/` reload while the session runs.
@@ -144,8 +144,8 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 ## Uninstall
 
 ```
-/plugin uninstall model-router@claude-router
-/plugin marketplace remove claude-router
+/plugin uninstall model-router@magic-router
+/plugin marketplace remove magic-router
 ```
 
 Then stop the daemon (`pkill -f server/classifier.py`) and, to reclaim the disk, delete `~/.cache/model-router` and the weights under `~/.cache/huggingface/hub/models--fastino--GLiNER2.5-Decide`.
