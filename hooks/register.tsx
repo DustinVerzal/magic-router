@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Effort, Probs, Route } from '../types'
-import { EFFORTS, SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
+import { EFFORTS, SIGNALS, TASKS, effortFor, isFollowUp, keepVariant, modelFor, score } from './route'
 
 const DAEMON = 'http://127.0.0.1:8765' // ponytail: fixed port, matches ROUTER_PORT's default in server/classifier.py
 
@@ -24,7 +24,11 @@ const HEAT: Record<Effort, string> = { low: 'success', medium: 'success', high: 
 const pct = (p: number) => `${Math.round(p * 100)}%`
 const short = (model: string) => model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2')
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // userConfig `model`: "keep" never picks a model, so the session stays on its own (a long-context
+  // variant, a model chosen for the whole project) and only effort is routed.
+  const keepsModel = options.model === 'keep'
+
   // Start the shared daemon if no session has: it outlives this one, so only the first session after a
   // reboot pays the model load (~10s; the first run ever also installs torch and downloads the weights).
   on('session.start', async ($, e, next) => {
@@ -77,7 +81,7 @@ export const register: Register = on => {
     const s = score(found.choose, found.flags)
     const last = await read($, route)
     const chosen: Route = {
-      model: picked ? (last?.model ?? null) : modelFor(s),
+      model: keepsModel ? null : picked ? (last?.model ?? null) : modelFor(s),
       effort: effortFor(s),
       score: s,
       task: found.choose,
@@ -105,7 +109,7 @@ export const register: Register = on => {
       if ((await read($, note)) === null) await update($, note, () => `stood aside: ${asked.model} chosen by hand`)
       return yield* next(e)
     }
-    return yield* next({ ...e, model: r.model ?? e.model, effort: r.effort })
+    return yield* next({ ...e, model: r.model === null ? e.model : keepVariant(r.model, e.model), effort: r.effort })
   })
 
   on('turn.complete', async ($, e, next) => {

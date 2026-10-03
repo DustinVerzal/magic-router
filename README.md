@@ -33,7 +33,7 @@ A Claude Code mod that routes each session to **Sonnet 5.5 or Opus 5.5** and eac
 ## Requirements
 
 - Claude Code **2.1.287 or later** (`claude --version`)
-- macOS or Linux
+- macOS or Linux. On Windows the classifier runs (tested on Windows 11 with Git Bash and uv), but the plugin does not start it by itself yet: see [Windows](#windows).
 - `curl`. If [`uv`](https://docs.astral.sh/uv/) isn't installed, the first session installs it to `~/.local/bin` (no shell profile edits), and uv fetches a suitable Python (3.10–3.13) by itself.
 - About 2 GB of free RAM while the classifier runs, and about 2 GB of disk for torch and the weights
 
@@ -139,6 +139,21 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 
 > [!NOTE]
 > The weights and thresholds were tuned by eye on 15 prompts, so retune them on your own traffic: fork the repo, edit `hooks/route.ts`, and load your fork with `--plugin-dir`.
+
+## Keeping your model
+
+By default the first prompt picks the session's model. To route **effort only** and never change the model, set the plugin's **Model routing** option to `keep` (`/config`, or `pluginConfigs["model-router"].options.model` in settings). Use it when the session's model is a choice you made for the whole conversation, or when your first prompt is usually a short opener that says little about the work that follows.
+
+With `route`, a session that is already on a variant of the chosen model keeps its variant. If the route picks Opus and the session runs `claude-opus-5-5[1m]`, the request stays on `claude-opus-5-5[1m]`; the bare id would drop the 1M-context window.
+
+## Windows
+
+The classifier daemon runs on Windows: with [uv](https://docs.astral.sh/uv/) installed and Git Bash, `scripts/gliner.sh setup` installs it and starts it, and it answers on `127.0.0.1:8765` like anywhere else (about 50 s to load the model, about 0.16 s a prompt, about 2.3 GB of RAM on the machine it was tried on).
+
+Two things differ from macOS and Linux:
+
+- **The plugin does not start the daemon.** It launches it with `sh`, which is not on the path of a native Windows process. Start it yourself from Git Bash (`scripts/gliner.sh start`) after a reboot; sessions find it once it is up.
+- **`scripts/gliner.sh stop` needs `pkill`**, which Git Bash does not ship. Stop it with `taskkill /F /PID <pid>`, the pid from `netstat -ano | findstr :8765`.
 
 ## When it stands aside
 

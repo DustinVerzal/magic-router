@@ -15,5 +15,17 @@
     "effort",
     "gliner"
   ],
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Model routing",
+      "description": "route: pick the model from the session's first prompt. keep: never change the model and route effort only.",
+      "default": "route",
+      "options": [
+        "route",
+        "keep"
+      ]
+    }
+  }
 }

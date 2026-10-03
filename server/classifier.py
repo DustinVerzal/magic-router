@@ -36,6 +36,30 @@ def load():
     print(f"loaded {MODEL_ID} in {time.perf_counter() - t:.1f}s", flush=True)
 
 
+def utf8_output():
+    """Write the log as UTF-8 whatever the platform's default. The daemon's output is redirected to a
+    file, which on Windows gets the ANSI code page (cp1252): gliner2 prints an emoji while loading, the
+    print raised UnicodeEncodeError inside load(), and the model never became ready."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
+def load_or_exit():
+    """A daemon whose model failed to load would hold the port and answer "still loading" for ever, and
+    nothing would start a working one. Log the failure and exit, so the next session tries again."""
+    try:
+        load()
+    except BaseException:
+        import traceback
+
+        traceback.print_exc()
+        sys.stderr.flush()
+        os._exit(1)
+
+
 def distribution(scores):
     """Single-label confidence is a softmax over label logits; multi_label at threshold 0 gives each
     label's sigmoid instead, so invert those to logits and softmax for the whole distribution."""
@@ -106,6 +130,7 @@ if __name__ == "__main__":
         server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
         sys.exit(0)
-    threading.Thread(target=load, daemon=True).start()
+    utf8_output()
+    threading.Thread(target=load_or_exit, daemon=True).start()
     print(f"magic-router classifier on 127.0.0.1:{PORT}", flush=True)
     server.serve_forever()
