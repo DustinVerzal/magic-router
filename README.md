@@ -33,7 +33,7 @@ A Claude Code mod that routes each session to **Sonnet 5.5 or Opus 5.5** and eac
 
 - Claude Code **2.1.287 or later** (`claude --version`)
 - macOS or Linux
-- [`uv`](https://docs.astral.sh/uv/) on the `PATH` Claude Code sees. uv fetches a suitable Python (3.10–3.13) by itself.
+- `curl`. If [`uv`](https://docs.astral.sh/uv/) isn't installed, the first session installs it to `~/.local/bin` (no shell profile edits), and uv fetches a suitable Python (3.10–3.13) by itself.
 - About 2 GB of free RAM while the classifier runs, and about 2 GB of disk for torch and the weights
 
 ## Install
@@ -45,7 +45,7 @@ In Claude Code:
 /plugin install model-router@magic-router
 ```
 
-Restart Claude Code. That's all. The first session starts the classifier itself (see [First run](#first-run)).
+Restart Claude Code. That's all. The first session installs and starts the classifier itself (see [First run](#first-run)).
 
 <details>
 <summary><b>Warm it up first</b>: skip the first-run download wait</summary>
@@ -83,7 +83,7 @@ The first session after a reboot starts the classifier daemon (`server/classifie
 
 | When | What happens |
 |---|---|
-| **First run ever** | uv installs torch and gliner2, and the weights download (~1.7 GB). The band shows `classifier unreachable` until this finishes, and the session keeps its own model. |
+| **First run ever** | uv installs (if missing), then torch and gliner2 install, and the weights download (~1.7 GB). The band shows `classifier unreachable` until this finishes, and the session keeps its own model. |
 | **First session after a reboot** | The model loads in about 10 s, and the first prompt waits for it. |
 | **Every later prompt** | About 0.3 s of CPU. |
 
@@ -137,7 +137,7 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 | Symptom | Fix |
 |---|---|
 | Band says `classifier unreachable` | Run `scripts/gliner.sh start` and read the log it names. On a first run, it's usually still downloading. |
-| Daemon never starts from Claude Code, but `gliner.sh start` works | Claude Code can't find `uv`. Add uv's directory (often `~/.local/bin`) to `PATH` in your shell profile, then restart Claude Code. |
+| Daemon never starts from Claude Code, but `gliner.sh start` works | Read `~/.cache/model-router/classifier.log`: the uv install or a torch download likely failed (offline, proxy). |
 | Band says `stood aside` | You picked a model or effort by hand (`/model`, `/effort`). `/clear` to let the router pick again. |
 | Port 8765 is taken by something else | Stop that process; the port is fixed in `hooks/register.tsx` and `scripts/gliner.sh`. |
 

@@ -35,11 +35,12 @@ export const register: Register = on => {
     )
     if (!isUp) {
       const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/model-router/classifier.log`
-      // `;` not `&&`: `a && b &` backgrounds a subshell that keeps run's stdout pipe open, holding it until its 30s timeout.
+      // The subshell's own redirect matters: a backgrounded list without one keeps run's stdout pipe open
+      // until its 30s timeout. uv lands in ~/.local/bin without touching shell profiles, where gliner.sh looks too.
       await $.process.run([
         'sh',
         '-c',
-        'mkdir -p "$(dirname "$2")"; nohup uv run --script "$1" </dev/null >>"$2" 2>&1 &',
+        'mkdir -p "$(dirname "$2")"; ( PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | UV_NO_MODIFY_PATH=1 sh; exec nohup uv run --script "$1" ) </dev/null >>"$2" 2>&1 &',
         'sh',
         `${$.plugin.root}/server/classifier.py`,
         log,
