@@ -34,6 +34,15 @@ export const register: Register = on => {
       () => false,
     )
     if (!isUp) {
+      const server = `${$.plugin.root}/server/classifier.py`
+      const profile = await $.env.get('USERPROFILE') // set on Windows only
+      if (profile) {
+        // ponytail: untested on real Windows; same flow as the sh branch below, via PowerShell
+        const log = `${profile}\\.cache\\model-router\\classifier.log`
+        const ps = `$env:PATH = "$HOME\\.local\\bin;$env:PATH"; New-Item -ItemType Directory -Force '${profile}\\.cache\\model-router' | Out-Null; if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { $env:UV_NO_MODIFY_PATH = '1'; irm https://astral.sh/uv/install.ps1 | iex }; Start-Process cmd -WindowStyle Hidden -ArgumentList '/c', 'uv run --script "${server}" >> "${log}" 2>&1'`
+        await $.process.run(['powershell', '-NoProfile', '-Command', ps])
+        return started
+      }
       const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/model-router/classifier.log`
       // The subshell's own redirect matters: a backgrounded list without one keeps run's stdout pipe open
       // until its 30s timeout. uv lands in ~/.local/bin without touching shell profiles, where gliner.sh looks too.
@@ -42,7 +51,7 @@ export const register: Register = on => {
         '-c',
         'mkdir -p "$(dirname "$2")"; ( PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | UV_NO_MODIFY_PATH=1 sh; exec nohup uv run --script "$1" ) </dev/null >>"$2" 2>&1 &',
         'sh',
-        `${$.plugin.root}/server/classifier.py`,
+        server,
         log,
       ])
     }
