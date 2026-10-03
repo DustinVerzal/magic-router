@@ -4,12 +4,10 @@ A Claude Code mod that routes each session to **Sonnet 5.5 or Opus 5.5** and eac
 
 - **The model is picked once**, from the session's first prompt. Switching models mid-conversation throws away the prompt cache, so the model stays fixed after that.
 - **Effort is picked again on every prompt.** Short replies ("yes", "go ahead") keep the last effort.
-- **A band above the prompt** shows the route, the task distribution, the strongest complexity signals, and last turn's cache-read %.
+- **A band above the prompt** shows the model, the effort, how long classifying took, and last turn's cache-read %.
 
 ```
-router opus 5.5 · effort max  score 2.12 · 326ms · cache 94% read  [ hide ]
-task agentic_coding 42% · scientific_coding 16% · long_context 14%
-signals large_scope 81% · verification 31% · multi_file 28%
+router  opus 5.5  effort ▰▰▰▰▰ max  326ms · cache 94% read  [ hide ]
 ```
 
 ## Requirements
