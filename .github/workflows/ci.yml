@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Validate plugin and marketplace manifests
+        run: claude plugin validate .
+
+      - name: Tests
+        run: claude plugin test .
+
+      - name: Python syntax
+        run: python3 -m py_compile server/classifier.py
+
+      - name: Shell lint
+        run: shellcheck scripts/*.sh
+
+      - name: Hook config is valid JSON
+        run: jq empty hooks/hooks.json
