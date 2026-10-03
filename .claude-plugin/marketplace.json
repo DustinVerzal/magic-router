@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-router",
+  "description": "Routes Claude Code sessions to Sonnet or Opus and prompts to an effort level with a local classifier.",
+  "owner": {
+    "name": "Dustin Verzal",
+    "url": "https://github.com/DustinVerzal"
+  },
+  "plugins": [
+    {
+      "name": "model-router",
+      "description": "Routes each session to Sonnet 5.5 or Opus 5.5 and each prompt to an effort level, using a local GLiNER2.5 classifier",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}
