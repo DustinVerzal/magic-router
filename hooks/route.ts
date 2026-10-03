@@ -40,20 +40,19 @@ export const SIGNAL_WEIGHTS: Probs = {
   quick: -1.5,
 }
 
-// Where Opus 5.5's lead over Sonnet 5.5 on the matching AA eval is wider or narrower than its overall lead.
-// Gaps are averaged over the five effort levels (the router moves effort per prompt), in points
-// (scripts/benchmarks.py, 2026-10-03): HLE +10.1, Terminal-Bench v4.0 +8.9, SciCode +7.2, AA-LCR +4.9,
-// against the Intelligence Index's +5.9, which the families with no score for both models (τ-banking,
-// GDPval, GPQA, Omniscience) get. Bias = (gap - 5.9) * 0.03, so a family at the overall gap is 0 and
-// the scale of OPUS_AT and EFFORTS holds. At Max alone Sonnet wins Terminal-Bench; at every lower effort Opus does.
+// Where Opus's lead over Sonnet on the matching AA eval is wider or narrower than its overall lead.
+// Gaps are averaged over the effort levels both have (the router moves effort per prompt), in points
+// (scripts/benchmarks.py, 2026-10-03): hle +10.1, terminalbench_v4_0 +8.9, scicode +7.2, lcr +4.9,
+// against the Intelligence Index's +5.9, which families with no eval get. Bias = (gap - 5.9) * 0.03,
+// so a family at the overall gap is 0 and the scale of OPUS_AT and EFFORTS holds.
 export const TASK_BIAS: Probs = {
   reasoning: 0.13,
   agentic_coding: 0.09,
   scientific_coding: 0.04,
-  long_context: -0.03,
   tool_use: 0,
   knowledge_work: 0,
   knowledge_qa: 0,
+  long_context: -0.03,
 }
 
 export const OPUS_AT = 1.1
