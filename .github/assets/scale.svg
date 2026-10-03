@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="186" viewBox="0 0 920 186" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13">
+  <title>Score to effort and model</title>
+  <defs>
+    <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="60" x2="860">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".07" stop-color="#fff"/>
+      <stop offset=".93" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="ends"><rect x="0" y="0" width="920" height="186" fill="url(#fade)"/></mask>
+  </defs>
+  <rect x=".5" y=".5" width="919" height="185" rx="12" fill="#121214" stroke="#2a2a30"/>
+  <text x="486.67" y="34" text-anchor="middle"><tspan fill="#8f8f99">Sonnet ←</tspan><tspan fill="#e8e6e3" font-weight="700" dx="10">1.1</tspan><tspan fill="#8f8f99" dx="10">→ Opus</tspan></text>
+  <line x1="486.67" y1="44" x2="486.67" y2="112" stroke="#e8e6e3" stroke-opacity=".55" stroke-dasharray="3 3"/>
+  <text x="180" y="82" fill="#4eba65" font-weight="700" text-anchor="middle">low</text>
+  <text x="380" y="82" fill="#4eba65" font-weight="700" text-anchor="middle">medium</text>
+  <text x="526.67" y="82" fill="#ffc107" font-weight="700" text-anchor="middle">high</text>
+  <text x="660" y="82" fill="#ff6b80" font-weight="700" text-anchor="middle">xhigh</text>
+  <text x="793.33" y="82" fill="#ff6b80" font-weight="700" text-anchor="middle">max</text>
+  <g mask="url(#ends)">
+    <rect x="60" y="96" width="238.5" height="8" rx="2" fill="#4eba65"/>
+    <rect x="301.5" y="96" width="157" height="8" rx="2" fill="#4eba65"/>
+    <rect x="461.5" y="96" width="130.33" height="8" rx="2" fill="#ffc107"/>
+    <rect x="594.83" y="96" width="130.33" height="8" rx="2" fill="#ff6b80"/>
+    <rect x="728.17" y="96" width="131.83" height="8" rx="2" fill="#ff6b80"/>
+  </g>
+  <g fill="#8f8f99" font-size="11"><text x="300" y="124" text-anchor="middle">0.4</text><text x="460" y="124" text-anchor="middle">1.0</text><text x="593.33" y="124" text-anchor="middle">1.5</text><text x="726.67" y="124" text-anchor="middle">2.0</text></g>
+  <line x1="257.33" y1="108" x2="257.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
+  <circle cx="257.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
+  <text x="261.33" y="164" text-anchor="end" font-size="12"><tspan fill="#8f8f99">fix the typo</tspan><tspan fill="#e8e6e3" dx="8">0.24</tspan></text>
+  <line x1="345.33" y1="108" x2="345.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
+  <circle cx="345.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
+  <text x="341.33" y="164" text-anchor="start" font-size="12"><tspan fill="#8f8f99">add retry + tests</tspan><tspan fill="#e8e6e3" dx="8">0.57</tspan></text>
+  <line x1="705.33" y1="108" x2="705.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
+  <circle cx="705.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
+  <text x="705.33" y="164" text-anchor="middle" font-size="12"><tspan fill="#8f8f99">design the job queue</tspan><tspan fill="#e8e6e3" dx="8">1.92</tspan></text>
+</svg>

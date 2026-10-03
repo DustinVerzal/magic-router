@@ -47,14 +47,14 @@ export const TASK_BIAS: Probs = {
   long_context: 0.3,
   scientific_coding: 0.1,
   knowledge_work: 0,
-  tool_use: -0.2,
+  tool_use: -0.5,
   knowledge_qa: -0.3,
 }
 
 export const OPUS_AT = 1.1
 
 // Each effort's lowest score, highest first. Tuned by eye on 15 prompts: retune on your own traffic.
-const EFFORTS: readonly (readonly [number, Effort])[] = [
+export const EFFORTS: readonly (readonly [number, Effort])[] = [
   [2.0, 'max'],
   [1.5, 'xhigh'],
   [1.0, 'high'],
@@ -66,9 +66,12 @@ const EFFORTS: readonly (readonly [number, Effort])[] = [
 // read as trivial; classify them against the previous prompt if that misroutes.
 export const FOLLOW_UP_WORDS = 4
 
-const dot = (p: Probs, w: Probs) => Object.entries(w).reduce((sum, [k, weight]) => sum + (p[k] ?? 0) * weight, 0)
+const times = (p: Probs, w: Probs) => Object.fromEntries(Object.entries(w).map(([k, weight]) => [k, (p[k] ?? 0) * weight]))
 
-export const score = (task: Probs, signals: Probs) => dot(signals, SIGNAL_WEIGHTS) + dot(task, TASK_BIAS)
+// The score's terms by label (task and signal labels never collide): what pushed a prompt up or down.
+export const terms = (task: Probs, signals: Probs): Probs => ({ ...times(signals, SIGNAL_WEIGHTS), ...times(task, TASK_BIAS) })
+
+export const score = (task: Probs, signals: Probs) => Object.values(terms(task, signals)).reduce((a, b) => a + b, 0)
 
 export const effortFor = (s: number): Effort => EFFORTS.find(([min]) => s >= min)![1]
 

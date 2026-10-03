@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Probs, Route } from '../types'
-import { SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
+import type { Effort, Probs, Route } from '../types'
+import { EFFORTS, SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
 
 const DAEMON = 'http://127.0.0.1:8765' // ponytail: fixed port, matches ROUTER_PORT's default in server/classifier.py
 
@@ -18,13 +18,10 @@ const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
 
 type Classified = { choose: Probs; flags: Probs; ms: number }
 
+const LADDER = EFFORTS.map(([, e]) => e).reverse()
+// ponytail: theme keys, so the colours follow light and dark themes; low and medium share green
+const HEAT: Record<Effort, string> = { low: 'success', medium: 'success', high: 'warning', xhigh: 'error', max: 'error' }
 const pct = (p: number) => `${Math.round(p * 100)}%`
-const top = (p: Probs, n: number) =>
-  Object.entries(p)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
-    .map(([k, v]) => `${k} ${pct(v)}`)
-    .join(' · ')
 const short = (model: string) => model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2')
 
 export const register: Register = on => {
@@ -38,6 +35,7 @@ export const register: Register = on => {
     )
     if (!isUp) {
       const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/model-router/classifier.log`
+      // `;` not `&&`: `a && b &` backgrounds a subshell that keeps run's stdout pipe open, holding it until its 30s timeout.
       await $.process.run([
         'sh',
         '-c',
@@ -142,31 +140,33 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" gap={1}>
-          <Text bold>router</Text>
+        <Box flexDirection="row" gap={2}>
+          <Box width={6}>
+            <Text bold>router</Text>
+          </Box>
+          {r !== null && <Text>{r.model === null ? 'session model' : short(r.model)}</Text>}
           {r !== null && (
-            <Text>
-              {r.model === null ? 'session model' : short(r.model)} · effort {r.effort}
-            </Text>
+            <Box flexDirection="row" gap={1}>
+              <Text dimColor>effort</Text>
+              <Text>
+                {LADDER.map((e, i) => (
+                  <Text key={e} color={HEAT[e]} dimColor={i > LADDER.indexOf(r.effort)}>
+                    {i <= LADDER.indexOf(r.effort) ? '▰' : '▱'}
+                  </Text>
+                ))}
+              </Text>
+              <Text bold color={HEAT[r.effort]}>
+                {r.effort}
+              </Text>
+            </Box>
           )}
-          {r !== null && (
-            <Text dimColor>
-              score {r.score.toFixed(2)} · {r.ms}ms
-            </Text>
-          )}
-          {total > 0 && <Text dimColor>· cache {pct(c!.read / total)} read</Text>}
+          <Text dimColor wrap="truncate">
+            {[r && `${r.ms}ms`, total > 0 && `cache ${pct(c!.read / total)} read`]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
           <Button key="hide" label="hide" onPress={() => update($, isHidden, () => true)} />
         </Box>
-        {r !== null && (
-          <Text dimColor wrap="truncate">
-            task {top(r.task, 3)}
-          </Text>
-        )}
-        {r !== null && (
-          <Text dimColor wrap="truncate">
-            signals {top(r.signals, 3)}
-          </Text>
-        )}
         {n !== null && (
           <Text color="warning" wrap="truncate">
             {n}

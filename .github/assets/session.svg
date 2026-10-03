@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="354" viewBox="0 0 920 354" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13">
+  <title>model-router in one session</title>
+  <style>
+    .row { animation: rise .7s cubic-bezier(.16,1,.3,1) backwards }
+    .pip { animation: fill .35s cubic-bezier(.16,1,.3,1) backwards }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px) } }
+    @keyframes fill { from { opacity: 0 } }
+    @media (prefers-reduced-motion: reduce) { .row, .pip { animation: none } }
+  </style>
+  <rect x=".5" y=".5" width="919" height="353" rx="12" fill="#121214" stroke="#2a2a30"/>
+  <g class="row" style="animation-delay:0.25s">
+    <text x="36" y="46" fill="#8f8f99">›</text>
+    <text x="51.6" y="46" fill="#e8e6e3">Design a sharded job queue for the worker fleet and write up the plan before touching code</text>
+    <rect x="26" y="59" width="868" height="27" rx="6" fill="#1b1b20"/>
+    <text x="51.6" y="77" fill="#e8e6e3" font-weight="700">router</text>
+    <text x="114" y="77" fill="#e8e6e3">opus 5.5</text>
+    <text x="192" y="77" fill="#8f8f99">effort</text>
+    <polygon class="pip" style="animation-delay:0.5s" points="247.5,77 252.7,77 254.3,68 249.1,68" fill="#4eba65"/>
+    <polygon class="pip" style="animation-delay:0.57s" points="255.3,77 260.5,77 262.1,68 256.9,68" fill="#4eba65"/>
+    <polygon class="pip" style="animation-delay:0.64s" points="263.1,77 268.3,77 269.9,68 264.7,68" fill="#ffc107"/>
+    <polygon class="pip" style="animation-delay:0.71s" points="270.9,77 276.1,77 277.7,68 272.5,68" fill="#ff6b80"/>
+    <polygon points="278.7,77 283.9,77 285.5,68 280.3,68" fill="none" stroke="#ff6b80" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <text x="293.4" y="77"><tspan fill="#ff6b80" font-weight="700">xhigh</tspan><tspan fill="#8f8f99" dx="15.6">327ms</tspan></text>
+    <text x="884" y="77" fill="#8f8f99" font-size="12" text-anchor="end">score 1.92 · first prompt picks Opus</text>
+  </g>
+  <g class="row" style="animation-delay:1.1s">
+    <text x="36" y="124" fill="#8f8f99">›</text>
+    <text x="51.6" y="124" fill="#e8e6e3">go ahead</text>
+    <rect x="26" y="137" width="868" height="27" rx="6" fill="#1b1b20"/>
+    <text x="51.6" y="155" fill="#e8e6e3" font-weight="700">router</text>
+    <text x="114" y="155" fill="#e8e6e3">opus 5.5</text>
+    <text x="192" y="155" fill="#8f8f99">effort</text>
+    <polygon class="pip" style="animation-delay:1.35s" points="247.5,155 252.7,155 254.3,146 249.1,146" fill="#4eba65"/>
+    <polygon class="pip" style="animation-delay:1.42s" points="255.3,155 260.5,155 262.1,146 256.9,146" fill="#4eba65"/>
+    <polygon class="pip" style="animation-delay:1.49s" points="263.1,155 268.3,155 269.9,146 264.7,146" fill="#ffc107"/>
+    <polygon class="pip" style="animation-delay:1.56s" points="270.9,155 276.1,155 277.7,146 272.5,146" fill="#ff6b80"/>
+    <polygon points="278.7,155 283.9,155 285.5,146 280.3,146" fill="none" stroke="#ff6b80" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <text x="293.4" y="155"><tspan fill="#ff6b80" font-weight="700">xhigh</tspan><tspan fill="#8f8f99" dx="15.6">327ms · cache 96% read</tspan></text>
+    <text x="884" y="155" fill="#8f8f99" font-size="12" text-anchor="end">short reply · keeps the last effort</text>
+  </g>
+  <g class="row" style="animation-delay:1.95s">
+    <text x="36" y="202" fill="#8f8f99">›</text>
+    <text x="51.6" y="202" fill="#e8e6e3">Add retry with exponential backoff to the webhook sender and cover it with tests</text>
+    <rect x="26" y="215" width="868" height="27" rx="6" fill="#1b1b20"/>
+    <text x="51.6" y="233" fill="#e8e6e3" font-weight="700">router</text>
+    <text x="114" y="233" fill="#e8e6e3">opus 5.5</text>
+    <text x="192" y="233" fill="#8f8f99">effort</text>
+    <polygon class="pip" style="animation-delay:2.2s" points="247.5,233 252.7,233 254.3,224 249.1,224" fill="#4eba65"/>
+    <polygon class="pip" style="animation-delay:2.27s" points="255.3,233 260.5,233 262.1,224 256.9,224" fill="#4eba65"/>
+    <polygon points="263.1,233 268.3,233 269.9,224 264.7,224" fill="none" stroke="#ffc107" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <polygon points="270.9,233 276.1,233 277.7,224 272.5,224" fill="none" stroke="#ff6b80" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <polygon points="278.7,233 283.9,233 285.5,224 280.3,224" fill="none" stroke="#ff6b80" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <text x="293.4" y="233"><tspan fill="#4eba65" font-weight="700">medium</tspan><tspan fill="#8f8f99" dx="15.6">348ms · cache 95% read</tspan></text>
+    <text x="884" y="233" fill="#8f8f99" font-size="12" text-anchor="end">score 0.57 · model stays on Opus</text>
+  </g>
+  <g class="row" style="animation-delay:2.8s">
+    <text x="36" y="280" fill="#8f8f99">›</text>
+    <text x="51.6" y="280" fill="#e8e6e3">fix the typo in the README heading</text>
+    <rect x="26" y="293" width="868" height="27" rx="6" fill="#1b1b20"/>
+    <text x="51.6" y="311" fill="#e8e6e3" font-weight="700">router</text>
+    <text x="114" y="311" fill="#e8e6e3">opus 5.5</text>
+    <text x="192" y="311" fill="#8f8f99">effort</text>
+    <polygon class="pip" style="animation-delay:3.05s" points="247.5,311 252.7,311 254.3,302 249.1,302" fill="#4eba65"/>
+    <polygon points="255.3,311 260.5,311 262.1,302 256.9,302" fill="none" stroke="#4eba65" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <polygon points="263.1,311 268.3,311 269.9,302 264.7,302" fill="none" stroke="#ffc107" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <polygon points="270.9,311 276.1,311 277.7,302 272.5,302" fill="none" stroke="#ff6b80" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <polygon points="278.7,311 283.9,311 285.5,302 280.3,302" fill="none" stroke="#ff6b80" stroke-opacity=".38" stroke-width="1" stroke-linejoin="round"/>
+    <text x="293.4" y="311"><tspan fill="#4eba65" font-weight="700">low</tspan><tspan fill="#8f8f99" dx="15.6">313ms · cache 97% read</tspan></text>
+    <text x="884" y="311" fill="#8f8f99" font-size="12" text-anchor="end">score 0.24</text>
+  </g>
+</svg>

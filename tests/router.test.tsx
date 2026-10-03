@@ -99,7 +99,7 @@ test('a model chosen by hand stands the router aside', async ($: any, on) => {
   expect(sent.at(-1)).toEqual({ model: 'claude-fable-5-1', effort: 'high' })
 })
 
-test('the band shows the route and its probabilities', async ($: any, on) => {
+test('the band shows the route and nothing about the classification', async ($: any, on) => {
   engine(on)
   await submit($, FIX.scheduler.text)
   await step($)
@@ -111,13 +111,13 @@ test('the band shows the route and its probabilities', async ($: any, on) => {
       component: 'AbovePrompt',
       props: { hasSurvey: false, isWorking: false, maxRows: 6 },
     })
-    expect(await ui.find({ text: /opus 5\.5 · effort max/ })).toBeDefined()
-    expect(await ui.find({ text: /task agentic_coding 42%/ })).toBeDefined()
-    expect(await ui.find({ text: /signals large_scope 81%/ })).toBeDefined()
+    expect(await ui.find({ text: /opus 5\.5/ })).toBeDefined()
+    expect(await ui.find({ text: /agentic|large scope|score/ })).toBeUndefined()
+    expect(await ui.find({ text: /^max$/ })).toBeDefined()
     await ui.unmount()
   }
 
   const ui = await $.ui.mount({ plugin: 'model-router', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 6 } })
   await ui.press({ key: 'hide' })
-  expect(await ui.find({ text: /effort max/ })).toBeUndefined()
+  expect(await ui.find({ text: /opus 5\.5/ })).toBeUndefined()
 })
