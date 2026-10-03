@@ -4,7 +4,7 @@
 
 import type { Effort, Probs } from '../types'
 
-export const MODELS = { sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' } as const
+export const MODELS = { sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5', fable: 'claude-fable-5-1' } as const
 
 // The type of work, one label per eval family of the Artificial Analysis Intelligence Index v4.1.
 // The classifier answers one distribution over these.
@@ -40,18 +40,27 @@ export const SIGNAL_WEIGHTS: Probs = {
   quick: -1.5,
 }
 
-// Lean up where Opus' lead on the matching AA evals is widest (agentic, long context, hard reasoning).
+// Where Opus 5.5's lead over Sonnet 5.5 on the matching AA eval is wider or narrower than its overall lead.
+// Gaps are averaged over the five effort levels (the router moves effort per prompt), in points
+// (scripts/benchmarks.py, 2026-10-03): HLE +10.1, Terminal-Bench v4.0 +8.9, SciCode +7.2, AA-LCR +4.9,
+// against the Intelligence Index's +5.9, which the families with no score for both models (τ-banking,
+// GDPval, GPQA, Omniscience) get. Bias = (gap - 5.9) * 0.03, so a family at the overall gap is 0 and
+// the scale of OPUS_AT and EFFORTS holds. At Max alone Sonnet wins Terminal-Bench; at every lower effort Opus does.
 export const TASK_BIAS: Probs = {
-  agentic_coding: 0.3,
-  reasoning: 0.3,
-  long_context: 0.3,
-  scientific_coding: 0.1,
+  reasoning: 0.13,
+  agentic_coding: 0.09,
+  scientific_coding: 0.04,
+  long_context: -0.03,
+  tool_use: 0,
   knowledge_work: 0,
-  tool_use: -0.5,
-  knowledge_qa: -0.3,
+  knowledge_qa: 0,
 }
 
 export const OPUS_AT = 1.1
+
+// ponytail: off (Infinity) while Opus 5.5 leads Fable 5.1 on the AA evals; run scripts/benchmarks.py,
+// and lower this above OPUS_AT (say 1.8) once Fable wins the families the high scores come from.
+export const FABLE_AT = Infinity
 
 // Each effort's lowest score, highest first. Tuned by eye on 15 prompts: retune on your own traffic.
 export const EFFORTS: readonly (readonly [number, Effort])[] = [
@@ -75,6 +84,6 @@ export const score = (task: Probs, signals: Probs) => Object.values(terms(task, 
 
 export const effortFor = (s: number): Effort => EFFORTS.find(([min]) => s >= min)![1]
 
-export const modelFor = (s: number): string => (s >= OPUS_AT ? MODELS.opus : MODELS.sonnet)
+export const modelFor = (s: number): string => (s >= FABLE_AT ? MODELS.fable : s >= OPUS_AT ? MODELS.opus : MODELS.sonnet)
 
 export const isFollowUp = (text: string) => text.trim().split(/\s+/).length < FOLLOW_UP_WORDS

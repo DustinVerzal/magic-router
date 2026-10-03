@@ -12,7 +12,7 @@ Picked by a classifier that runs on your machine.
 
 <br>
 
-<img src=".github/assets/session.svg" width="100%" alt="One session with the router band under each prompt. The first prompt, about designing a sharded job queue, scores 1.92 and picks Opus 5.5 at xhigh effort in 327 ms. A short 'go ahead' keeps xhigh. A prompt to add retry with backoff scores 0.57 and drops to medium, and fixing a typo scores 0.24 and drops to low, while the model stays on Opus 5.5.">
+<img src=".github/assets/session.svg" width="100%" alt="One session with the router band under each prompt. The first prompt, about designing a sharded job queue, scores 1.86 and picks Opus 5.5 at xhigh effort in 326 ms. A short 'go ahead' keeps xhigh. A prompt to add retry with backoff scores 0.49 and drops to medium, and fixing a typo scores 0.21 and drops to low, while the model stays on Opus 5.5.">
 
 <sub>One session. Scores and latencies are real classifier output for these prompts.</sub>
 
@@ -135,7 +135,7 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 3. **Score**: `Σ weight × P(signal) + Σ bias × P(task)`. The task bias leans toward Opus where its lead on the matching evals is widest.
 4. **Effort and model**: the score maps to `low < 0.4 ≤ medium < 1.0 ≤ high < 1.5 ≤ xhigh < 2.0 ≤ max`. On the first prompt, a score ≥ 1.1 picks Opus; anything lower picks Sonnet.
 
-<img src=".github/assets/scale.svg" width="100%" alt="The score scale. Effort bands run low below 0.4, medium to 1.0, high to 1.5, xhigh to 2.0, and max above. A dashed line at 1.1 splits Sonnet from Opus. The session's prompts sit at 0.24 (fix the typo, low), 0.57 (add retry and tests, medium), and 1.92 (design the job queue, xhigh).">
+<img src=".github/assets/scale.svg" width="100%" alt="The score scale. Effort bands run low below 0.4, medium to 1.0, high to 1.5, xhigh to 2.0, and max above. A dashed line at 1.1 splits Sonnet from Opus. The session's prompts sit at 0.21 (fix the typo, low), 0.49 (add retry and tests, medium), and 1.86 (design the job queue, xhigh).">
 
 > [!NOTE]
 > The weights and thresholds were tuned by eye on 15 prompts, so retune them on your own traffic: fork the repo, edit `hooks/route.ts`, and load your fork with `--plugin-dir`.
@@ -164,6 +164,10 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 ```
 
 Then stop the daemon (`pkill -f server/classifier.py`) and, to reclaim the disk, delete `~/.cache/model-router` and the weights under `~/.cache/huggingface/hub/models--fastino--GLiNER2.5-Decide`.
+
+## Benchmarks
+
+`just benchmarks` (or `AA_API_KEY=... uv run --script scripts/benchmarks.py`) pulls the [Artificial Analysis](https://artificialanalysis.ai/api) evals for Sonnet 5.5, Opus 5.5 and Fable 5.1, at every effort level, into a table (and caches the raw JSON in `~/.cache/model-router`). Put `AA_API_KEY=...` in a git-ignored `.env`, or export it in your shell. Fable 5.1 is wired in but off: set `FABLE_AT` in `hooks/route.ts` to a score above `OPUS_AT` to route the hardest first prompts to it.
 
 ## Development
 

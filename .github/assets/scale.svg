@@ -23,13 +23,13 @@
     <rect x="728.17" y="96" width="131.83" height="8" rx="2" fill="#ff6b80"/>
   </g>
   <g fill="#8f8f99" font-size="11"><text x="300" y="124" text-anchor="middle">0.4</text><text x="460" y="124" text-anchor="middle">1.0</text><text x="593.33" y="124" text-anchor="middle">1.5</text><text x="726.67" y="124" text-anchor="middle">2.0</text></g>
-  <line x1="257.33" y1="108" x2="257.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
-  <circle cx="257.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
-  <text x="261.33" y="164" text-anchor="end" font-size="12"><tspan fill="#8f8f99">fix the typo</tspan><tspan fill="#e8e6e3" dx="8">0.24</tspan></text>
-  <line x1="345.33" y1="108" x2="345.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
-  <circle cx="345.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
-  <text x="341.33" y="164" text-anchor="start" font-size="12"><tspan fill="#8f8f99">add retry + tests</tspan><tspan fill="#e8e6e3" dx="8">0.57</tspan></text>
-  <line x1="705.33" y1="108" x2="705.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
-  <circle cx="705.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
-  <text x="705.33" y="164" text-anchor="middle" font-size="12"><tspan fill="#8f8f99">design the job queue</tspan><tspan fill="#e8e6e3" dx="8">1.92</tspan></text>
+  <line x1="249.33" y1="108" x2="249.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
+  <circle cx="249.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
+  <text x="253.33" y="164" text-anchor="end" font-size="12"><tspan fill="#8f8f99">fix the typo</tspan><tspan fill="#e8e6e3" dx="8">0.21</tspan></text>
+  <line x1="324" y1="108" x2="324" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
+  <circle cx="324" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
+  <text x="320" y="164" text-anchor="start" font-size="12"><tspan fill="#8f8f99">add retry + tests</tspan><tspan fill="#e8e6e3" dx="8">0.49</tspan></text>
+  <line x1="689.33" y1="108" x2="689.33" y2="148" stroke="#8f8f99" stroke-opacity=".45"/>
+  <circle cx="689.33" cy="100" r="5" fill="#e8e6e3" stroke="#121214" stroke-width="2.5"/>
+  <text x="689.33" y="164" text-anchor="middle" font-size="12"><tspan fill="#8f8f99">design the job queue</tspan><tspan fill="#e8e6e3" dx="8">1.86</tspan></text>
 </svg>

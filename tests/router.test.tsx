@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { effortFor, modelFor, score } from '../hooks/route'
+import { FABLE_AT, effortFor, modelFor, score } from '../hooks/route'
 
 // What the daemon answered for these prompts (GLiNER2.5-Decide, rounded).
 const FIX = {
@@ -53,6 +53,7 @@ test('the policy routes the recorded classifications', () => {
   expect(route(FIX.push)).toBe('claude-sonnet-5-5 medium')
   expect(route(FIX.jwt)).toBe('claude-opus-5-5 high')
   expect(route(FIX.scheduler)).toBe('claude-opus-5-5 max')
+  expect(FABLE_AT === Infinity ? modelFor(99) : 'claude-fable-5-1').toBe(FABLE_AT === Infinity ? 'claude-opus-5-5' : modelFor(FABLE_AT)) // Fable stays off until FABLE_AT is lowered
 })
 
 test('the first prompt picks the model for the session; every prompt picks its effort', async ($: any, on) => {
