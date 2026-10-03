@@ -138,7 +138,20 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 <img src=".github/assets/scale.svg" width="100%" alt="The score scale. Effort bands run low below 0.4, medium to 1.0, high to 1.5, xhigh to 2.0, and max above. A dashed line at 1.1 splits Sonnet from Opus. The session's prompts sit at 0.21 (fix the typo, low), 0.49 (add retry and tests, medium), and 1.86 (design the job queue, xhigh).">
 
 > [!NOTE]
-> The weights and thresholds were tuned by eye on 15 prompts, so retune them on your own traffic: fork the repo, edit `hooks/route.ts`, and load your fork with `--plugin-dir`.
+> The weights and thresholds were tuned by eye on 15 prompts. To fit the effort pick to your own prompts, see [Tune it to your prompts](#tune-it-to-your-prompts).
+
+## Tune it to your prompts
+
+`just tune` (or `uv run --script scripts/tune.py`) trains the classifier on how you actually work:
+
+1. It reads your newest 500 prompts from `~/.claude/projects`. Slash commands and short follow-ups are skipped, because the router never classifies them.
+2. Opus at xhigh effort labels the effort each prompt needed. It labels 25 prompts per `claude -p` call, with no tools, no settings and no saved session. Each label and a one-line reason go to `~/.cache/model-router/tune/labels.jsonl`, so a rerun only labels new prompts. Skim them there.
+3. It trains a LoRA adapter for the classifier on 70% of your sessions, on CPU.
+4. On the other 30%, it compares the adapter's effort with the score's. If the adapter is closer to the labels, it installs the adapter to `~/.cache/model-router/tuned` and restarts the daemon. Otherwise it changes nothing.
+
+On 404 prompts, labelling cost $1.19 at API prices and training took 15 minutes on an M-series Mac. On 125 held-out prompts, the adapter matched the label 59% of the time and was off by 0.42 levels on average. The score matched 38% and was off by 0.70.
+
+With an adapter installed, the daemon answers effort from it, which adds a second pass of about 0.1 s. The score still picks the model on a session's first prompt. To undo, delete `~/.cache/model-router/tuned` and run `scripts/gliner.sh stop`.
 
 ## When it stands aside
 
