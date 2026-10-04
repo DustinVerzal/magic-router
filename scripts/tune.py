@@ -428,7 +428,10 @@ if BENCH:
         with ThreadPoolExecutor(8) as pool:
             answered[n] = list(pool.map(lambda r: decide(n, r["text"]), test))
 else:
-    shutil.rmtree(run, ignore_errors=True)
+    # The last run's adapter is kept as run.prev, so two runs can still be compared after the second one trains.
+    shutil.rmtree(WORK / "run.prev", ignore_errors=True)
+    if run.exists():
+        run.rename(WORK / "run.prev")
     if HOST:
         (WORK / "fit.json").write_text(json.dumps(fit, ensure_ascii=False))
         remote("--train", {"fit.json": WORK / "fit.json"}, ["run"])

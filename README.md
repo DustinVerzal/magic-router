@@ -197,6 +197,8 @@ Results from the author's history (3,344 prompts over six months), scored on 972
 | Always `medium` | 44% | 0.59 |
 | The default score | 40% | 0.69 |
 
+Contrast training was tried and dropped. Opus 5.5 at xhigh rewrote each of 2,538 training prompts into the nearest prompt that needed the next effort level up or down, and the adapter trained on both. On the same 1,024 held-out prompts it matched 66% of labels and was 0.35 levels off on average, against 65% and 0.37 without contrasts, while the rewrites cost $15.94 and training took twice as long. The adapter already gets about as close to the labels as they allow, so more labelled data or better labels is the place to look, not synthetic pairs.
+
 Labelling cost $10.33 at API prices. Training took about 15 minutes on an RTX 4080; on CPU it runs about 15 minutes per 400 prompts. Your numbers will differ.
 
 With an adapter installed, the daemon answers effort and model from it, which adds a second pass of about 0.1 s. The model is still picked only on a session's first prompt. An adapter trained before model labelling existed answers effort only; retune to get both. To undo, delete `~/.cache/magic-router/tuned` and run `scripts/gliner.sh stop`.
