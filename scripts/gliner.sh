@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install, run and inspect the GLiNER2.5 classifier daemon that model-router talks to.
+# Install, run and inspect the GLiNER2.5 classifier daemon that magic-router talks to.
 # The mod starts the daemon by itself; this script is for warming it up ahead of time and poking at it.
 #
 #   scripts/gliner.sh setup    install uv if missing, install torch + gliner2, download the weights, start
@@ -16,11 +16,13 @@ set -eu
 # shellcheck disable=SC1007  # empty CDPATH is deliberate
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 SERVER="$ROOT/server/classifier.py"
-URL=http://127.0.0.1:8765 # ponytail: fixed, matches DAEMON in hooks/register.tsx
-LOG="$HOME/.cache/model-router/classifier.log"
+PORT=${ROUTER_PORT:-8765} # the same variable the daemon and the mod read
+URL=http://127.0.0.1:$PORT
+export ROUTER_PORT=$PORT
+LOG="$HOME/.cache/magic-router/classifier.log"
 WAIT=${ROUTER_WAIT:-900} # seconds; the first run downloads ~1.7 GB of torch and weights
 
-HOSTFILE="$HOME/.cache/model-router/host" # written by `remote`
+HOSTFILE="$HOME/.cache/magic-router/host" # written by `remote`
 HOST=$(cat "$HOSTFILE" 2>/dev/null || true)
 AGENT="$HOME/Library/LaunchAgents/dev.magic-router.tunnel.plist"
 
@@ -52,15 +54,15 @@ start() {
 
 # Run this script's command on $HOST, from a copy of this checkout, with your tuned adapter (or none) copied there.
 on_host() {
-  ssh "$HOST" 'mkdir -p .cache/model-router/repo'
-  rsync -a --delete --exclude .git "$ROOT/" "$HOST:.cache/model-router/repo/"
-  if [ -d "$HOME/.cache/model-router/tuned" ]; then
-    rsync -a --delete "$HOME/.cache/model-router/tuned/" "$HOST:.cache/model-router/tuned/"
+  ssh "$HOST" 'mkdir -p .cache/magic-router/repo'
+  rsync -a --delete --exclude .git "$ROOT/" "$HOST:.cache/magic-router/repo/"
+  if [ -d "$HOME/.cache/magic-router/tuned" ]; then
+    rsync -a --delete "$HOME/.cache/magic-router/tuned/" "$HOST:.cache/magic-router/tuned/"
   else
-    ssh "$HOST" 'rm -rf .cache/model-router/tuned'
+    ssh "$HOST" 'rm -rf .cache/magic-router/tuned'
   fi
   # shellcheck disable=SC2029 # $1 is meant to expand locally
-  ssh "$HOST" "sh .cache/model-router/repo/scripts/gliner.sh $1"
+  ssh "$HOST" "ROUTER_PORT=$PORT sh .cache/magic-router/repo/scripts/gliner.sh $1"
 }
 
 # A launch agent keeps the daemon's port forwarded to $HOST's, so the mod reaches it at the same URL.
@@ -76,12 +78,12 @@ tunnel() {
   <key>ProgramArguments</key><array>
     <string>/usr/bin/ssh</string><string>-N</string><string>-o</string><string>BatchMode=yes</string>
     <string>-o</string><string>ServerAliveInterval=15</string><string>-o</string><string>ServerAliveCountMax=3</string>
-    <string>-L</string><string>8765:127.0.0.1:8765</string><string>$HOST</string>
+    <string>-L</string><string>$PORT:127.0.0.1:$PORT</string><string>$HOST</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
-  <key>StandardErrorPath</key><string>$HOME/.cache/model-router/tunnel.log</string>
+  <key>StandardErrorPath</key><string>$HOME/.cache/magic-router/tunnel.log</string>
 </dict></plist>
 EOF
   launchctl unload "$AGENT" 2>/dev/null || true
@@ -103,7 +105,7 @@ case "${1:-}" in
     if pkill -f server/classifier.py; then echo "stopped the local daemon"; fi
     tunnel
     sleep 3
-    echo "through the tunnel: $(health || echo 'not up yet; see ~/.cache/model-router/tunnel.log')"
+    echo "through the tunnel: $(health || echo 'not up yet; see ~/.cache/magic-router/tunnel.log')"
     ;;
   local)
     launchctl unload "$AGENT" 2>/dev/null || true

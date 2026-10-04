@@ -9,7 +9,7 @@
 Free key: https://artificialanalysis.ai/api. Default filters: the Sonnet, Opus and Fable versions in MODELS (hooks/route.ts),
 at every effort level. With no args it also rewrites TASK_BIAS in hooks/route.ts from the Opus-minus-Sonnet gaps.
 Prints one row per eval, one column per model; saves the raw response to
-~/.cache/model-router/benchmarks.json (the previous copy becomes benchmarks.prev.json) so you can diff.
+~/.cache/magic-router/benchmarks.json (the previous copy becomes benchmarks.prev.json) so you can diff.
 """
 import json
 import os
@@ -20,7 +20,7 @@ from datetime import date
 from pathlib import Path
 
 URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
-CACHE = Path.home() / ".cache/model-router"
+CACHE = Path.home() / ".cache/magic-router"
 ROUTE = Path(__file__).parent.parent / "hooks/route.ts"
 
 key = os.environ.get("AA_API_KEY") or sys.exit("set AA_API_KEY (free at https://artificialanalysis.ai/api)")

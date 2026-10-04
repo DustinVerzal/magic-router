@@ -4,14 +4,16 @@ import type { Register } from 'claude-code'
 import type { Effort, Probs, Route } from '../types'
 import { EFFORTS, SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
 
-const DAEMON = 'http://127.0.0.1:8765' // ponytail: fixed port, matches ROUTER_PORT's default in server/classifier.py
+// The daemon's URL: ROUTER_PORT, as server/classifier.py and scripts/gliner.sh read it.
+const daemon = async ($: { env: { get(k: string): Promise<string | undefined> } }) =>
+  `http://127.0.0.1:${(await $.env.get('ROUTER_PORT')) || '8765'}`
 
-const isPicked = atom({ plugin: 'model-router', key: 'isPicked' } as const, false)
-const route = atom({ plugin: 'model-router', key: 'route' } as const, null)
-const baseline = atom({ plugin: 'model-router', key: 'baseline' } as const, null)
-const note = atom({ plugin: 'model-router', key: 'note' } as const, null)
-const cache = atom({ plugin: 'model-router', key: 'cache' } as const, null)
-const isHidden = atom({ plugin: 'model-router', key: 'isHidden' } as const, false)
+const isPicked = atom({ plugin: 'magic-router', key: 'isPicked' } as const, false)
+const route = atom({ plugin: 'magic-router', key: 'route' } as const, null)
+const baseline = atom({ plugin: 'magic-router', key: 'baseline' } as const, null)
+const note = atom({ plugin: 'magic-router', key: 'note' } as const, null)
+const cache = atom({ plugin: 'magic-router', key: 'cache' } as const, null)
+const isHidden = atom({ plugin: 'magic-router', key: 'isHidden' } as const, false)
 
 // What a person sent; task notifications, peers and plugins keep the current route.
 const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
@@ -31,21 +33,23 @@ export const register: Register = on => {
   // reboot pays the model load (~10s; the first run ever also installs torch and downloads the weights).
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    const isUp = await $.http.fetch(`${DAEMON}/health`).then(
+    const url = await daemon($)
+    const isUp = await $.http.fetch(`${url}/health`).then(
       r => r.ok,
       () => false,
     )
     if (!isUp) {
-      const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/model-router/classifier.log`
+      const log = `${(await $.env.get('HOME')) ?? '/tmp'}/.cache/magic-router/classifier.log`
       // The subshell's own redirect matters: a backgrounded list without one keeps run's stdout pipe open
       // until its 30s timeout. uv lands in ~/.local/bin without touching shell profiles, where gliner.sh looks too.
       await $.process.run([
         'sh',
         '-c',
-        'mkdir -p "$(dirname "$2")"; ( PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | UV_NO_MODIFY_PATH=1 sh; exec nohup uv run --script "$1" ) </dev/null >>"$2" 2>&1 &',
+        'mkdir -p "$(dirname "$2")"; ( ROUTER_PORT="$3"; export ROUTER_PORT; PATH="$HOME/.local/bin:$PATH"; command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | UV_NO_MODIFY_PATH=1 sh; exec nohup uv run --script "$1" ) </dev/null >>"$2" 2>&1 &',
         'sh',
         `${$.plugin.root}/server/classifier.py`,
         log,
+        url.split(':').pop()!,
       ])
     }
     return started
@@ -57,8 +61,9 @@ export const register: Register = on => {
     const picked = await read($, isPicked)
     if (picked && isFollowUp(e.text)) return next(e)
 
+    const url = await daemon($)
     const found: Classified | undefined = await $.http
-      .fetch(`${DAEMON}/classify`, {
+      .fetch(`${url}/classify`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS, effort: LADDER }),
@@ -72,7 +77,7 @@ export const register: Register = on => {
       // A first prompt the classifier missed still settles the model (the session's own): picking one
       // later would switch models mid-conversation.
       await update($, isPicked, () => true)
-      await update($, note, () => `classifier unreachable at ${DAEMON}; see ~/.cache/model-router/classifier.log`)
+      await update($, note, () => `classifier unreachable at ${url}; see ~/.cache/magic-router/classifier.log`)
       return next(e)
     }
 

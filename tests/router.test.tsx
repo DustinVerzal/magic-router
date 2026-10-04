@@ -17,6 +17,7 @@ const SESSION = { model: 'claude-opus-5-5', effort: 'medium' } as const
 function engine(on: On, extra: object = {}) {
   const daemon = { isUp: true }
   const sent: { model: string; effort: unknown }[] = []
+  on('env.get', () => ({ value: undefined })) // no ROUTER_PORT: the default port
   on('http.fetch', ($, e) => {
     if (!daemon.isUp) return { deny: 'ECONNREFUSED' }
     if (e.url.endsWith('/health')) return { value: { status: 200, ok: true, headers: {}, text: '{"ready": true}' } }
@@ -115,7 +116,7 @@ test('the band shows the route and nothing about the classification', async ($: 
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({
-      plugin: 'model-router',
+      plugin: 'magic-router',
       surface,
       component: 'AbovePrompt',
       props: { hasSurvey: false, isWorking: false, maxRows: 6 },
@@ -126,7 +127,7 @@ test('the band shows the route and nothing about the classification', async ($: 
     await ui.unmount()
   }
 
-  const ui = await $.ui.mount({ plugin: 'model-router', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 6 } })
+  const ui = await $.ui.mount({ plugin: 'magic-router', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 6 } })
   await ui.press({ key: 'hide' })
   expect(await ui.find({ text: /opus 5\.5/ })).toBeUndefined()
 })

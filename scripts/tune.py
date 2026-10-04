@@ -12,12 +12,12 @@
    $skills or shell escapes, and no follow-ups under FOLLOW_UP_WORDS.
 2. Opus at xhigh effort labels the effort each one needed, 25 per `claude -p` call (no tools, settings or
    saved session; about $0.30 per 100 prompts at API prices). Labels are kept in
-   ~/.cache/model-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts; skim them there.
+   ~/.cache/magic-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts; skim them there.
 3. Trains a LoRA adapter for the classifier on 70% of your sessions: on this machine's CPU (about 15 min for 400
    prompts), or over ssh on a machine with an NVIDIA GPU and uv with TUNE_HOST=<ssh host> just tune, which
    scores the held-out prompts there too.
 4. On the other 30%, compares the adapter's effort with the router's current one (the score in hooks/route.ts).
-   If the adapter is closer to the labels, installs it to ~/.cache/model-router/tuned and restarts the daemon,
+   If the adapter is closer to the labels, installs it to ~/.cache/magic-router/tuned and restarts the daemon,
    which then answers effort from it. To undo: delete that directory and run `scripts/gliner.sh stop`.
 
     uv run --script scripts/tune.py --bench                                              (or: just bench)
@@ -47,7 +47,7 @@ import classifier  # noqa: E402  the daemon's own loading and inference, so the 
 
 ROUTE = (ROOT / "hooks/route.ts").read_text()
 HOME = Path.home()
-WORK = HOME / ".cache/model-router/tune"
+WORK = HOME / ".cache/magic-router/tune"
 LABELS = WORK / "labels.jsonl"
 LEVELS = ["low", "medium", "high", "xhigh", "max"]
 LIMIT = int(sys.argv[1]) if sys.argv[1:2] and sys.argv[1].isdigit() else None
@@ -303,7 +303,7 @@ def answers(adapter, test):
     return [current(f) for f in found], [max(f["effort"], key=f["effort"].get) for f in found]
 
 
-REMOTE = ".cache/model-router/repo"  # this checkout's copy on TUNE_HOST, under its home; gliner.sh remote uses it too
+REMOTE = ".cache/magic-router/repo"  # this checkout's copy on TUNE_HOST, under its home; gliner.sh remote uses it too
 
 
 def remote(args, send, fetch=()):
