@@ -23,7 +23,7 @@ from pathlib import Path
 
 MODEL_ID = os.environ.get("ROUTER_MODEL", "fastino/GLiNER2.5-Decide")
 PORT = int(os.environ.get("ROUTER_PORT", "8765"))
-TUNED = Path.home() / ".cache/model-router/tuned"  # a LoRA adapter trained on your prompts by scripts/tune.py
+TUNED = Path.home() / ".cache/magic-router/tuned"  # a LoRA adapter trained on your prompts by scripts/tune.py
 
 model = None
 tuned = None  # model with the adapter, when there is one

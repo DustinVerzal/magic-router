@@ -1,5 +1,5 @@
 {
-  "name": "model-router",
+  "name": "magic-router",
   "version": "0.1.6",
   "description": "Routes each session to Sonnet 5.5 or Opus 5.5 and each prompt to an effort level, using a local GLiNER2.5 classifier",
   "author": {

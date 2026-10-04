@@ -18,7 +18,7 @@ export type Cache = { read: number; written: number; uncached: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    'model-router': {
+    'magic-router': {
       /** Whether this session's model has been picked (on its first prompt, even if that failed). */
       isPicked: boolean
       route: Route | null

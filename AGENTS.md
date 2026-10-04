@@ -1,6 +1,6 @@
 # AGENTS.md
 
-A Claude Code plugin (`model-router`) that picks Sonnet or Opus per session and an effort level per prompt, from a local GLiNER2.5 classifier daemon. README.md covers what it does for users; this file covers what you need to change it safely.
+A Claude Code plugin (`magic-router`) that picks Sonnet or Opus per session and an effort level per prompt, from a local GLiNER2.5 classifier daemon. README.md covers what it does for users; this file covers what you need to change it safely.
 
 ## Layout
 
@@ -26,7 +26,7 @@ Don't run `just tune`, `just bench` or `just benchmarks` unless asked: they cost
 
 - `scripts/tune.py` regex-parses `hooks/route.ts` for `TASKS`, `SIGNALS`, `SIGNAL_WEIGHTS`, `TASK_BIAS`, `EFFORTS` and `FOLLOW_UP_WORDS`. Keep those as plain literals in their current shape (one `key: value` per line, `[number, 'effort']` tuples), or tuning crashes or silently drops entries.
 - `scripts/benchmarks.py` (no args) rewrites the `TASK_BIAS` block, from its `// Where Opus` comment to the closing `}`. Hand edits there get overwritten; change the script instead.
-- Port 8765 is hard-coded in three places: `DAEMON` in `hooks/register.tsx`, `URL` in `scripts/gliner.sh`, and `ROUTER_PORT`'s default in `server/classifier.py`. Change all three or none.
+- The port is `ROUTER_PORT` (default 8765), read by `daemon()` in `hooks/register.tsx`, `PORT` in `scripts/gliner.sh` and `server/classifier.py`. Keep the three defaults in step.
 - The model is picked once per session on purpose: switching mid-conversation forfeits the prompt cache. Don't make the model re-route per prompt.
 - `turn.step` must leave subagent requests (`e.agentId !== undefined`) untouched, and must stand aside once `/model` or `/effort` changes the baseline. Tests cover both; keep them passing.
 - `tests/router.test.tsx` fixtures (`FIX`) are recorded daemon outputs. If you change weights or thresholds, update the expected routes in the first test deliberately, not by copying whatever the new code returns.

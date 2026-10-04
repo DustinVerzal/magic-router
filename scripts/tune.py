@@ -13,14 +13,14 @@
 2. Opus at xhigh effort labels the model (Sonnet or Opus) and effort each one needed, given the Artificial Analysis
    scores for each model at each effort (`just benchmarks` caches them), 25 per `claude -p` call (no tools, settings or
    saved session; about $0.30 per 100 prompts at API prices). Labels are kept in
-   ~/.cache/model-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts (and those
+   ~/.cache/magic-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts (and those
    labelled under an older labeller prompt); skim them there.
 3. Trains a LoRA adapter for the classifier on 70% of your sessions: on this machine's CPU (about 15 min for 400
    prompts), or over ssh on a machine with an NVIDIA GPU and uv with TUNE_HOST=<ssh host> just tune, which
    scores the held-out prompts there too.
 4. On the other 30%, compares the adapter's effort and model with the router's current ones (the score in
    hooks/route.ts). If the adapter is closer on effort and no worse on model, installs it to
-   ~/.cache/model-router/tuned and restarts the daemon, which then answers both from it. To undo: delete that directory and run `scripts/gliner.sh stop`.
+   ~/.cache/magic-router/tuned and restarts the daemon, which then answers both from it. To undo: delete that directory and run `scripts/gliner.sh stop`.
 
     uv run --script scripts/tune.py --bench                                              (or: just bench)
 
@@ -49,7 +49,7 @@ import classifier  # noqa: E402  the daemon's own loading and inference, so the 
 
 ROUTE = (ROOT / "hooks/route.ts").read_text()
 HOME = Path.home()
-WORK = HOME / ".cache/model-router/tune"
+WORK = HOME / ".cache/magic-router/tune"
 LABELS = WORK / "labels.jsonl"
 LEVELS = ["low", "medium", "high", "xhigh", "max"]
 LIMIT = int(sys.argv[1]) if sys.argv[1:2] and sys.argv[1].isdigit() else None
@@ -180,7 +180,7 @@ def prompts():
     return found[:LIMIT]
 
 
-AA = HOME / ".cache/model-router/benchmarks.json"  # scripts/benchmarks.py's cache of the Artificial Analysis API
+AA = HOME / ".cache/magic-router/benchmarks.json"  # scripts/benchmarks.py's cache of the Artificial Analysis API
 AA_EVALS = {"artificial_analysis_intelligence_index": "AA index", "hle": "reasoning (HLE)",
             "terminalbench_v4_0": "agentic coding (Terminal-Bench)", "scicode": "scientific coding (SciCode)",
             "lcr": "long context (AA-LCR)"}
@@ -345,7 +345,7 @@ def answers(adapter, test):
             [current(f)[1] for f in found], [top(f, "pick") if "pick" in f else None for f in found])  # an older adapter has none
 
 
-REMOTE = ".cache/model-router/repo"  # this checkout's copy on TUNE_HOST, under its home; gliner.sh remote uses it too
+REMOTE = ".cache/magic-router/repo"  # this checkout's copy on TUNE_HOST, under its home; gliner.sh remote uses it too
 
 
 def remote(args, send, fetch=()):
