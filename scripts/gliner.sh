@@ -59,6 +59,7 @@ on_host() {
   else
     ssh "$HOST" 'rm -rf .cache/model-router/tuned'
   fi
+  # shellcheck disable=SC2029 # $1 is meant to expand locally
   ssh "$HOST" "sh .cache/model-router/repo/scripts/gliner.sh $1"
 }
 
@@ -98,7 +99,8 @@ case "${1:-}" in
     on_host setup # the first time, installs uv, torch and the weights there; then starts the daemon
     mkdir -p "$(dirname "$HOSTFILE")"
     echo "$HOST" >"$HOSTFILE"
-    pkill -f server/classifier.py && echo "stopped the local daemon" || true # it would hold the tunnel's port
+    # it would hold the tunnel's port
+    if pkill -f server/classifier.py; then echo "stopped the local daemon"; fi
     tunnel
     sleep 3
     echo "through the tunnel: $(health || echo 'not up yet; see ~/.cache/model-router/tunnel.log')"
