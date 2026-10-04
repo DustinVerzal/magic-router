@@ -64,15 +64,19 @@ const routeFor = (found: Classified, model?: string | null): Route => {
 // A subagent's conversation is its own, so it can take a model of its own at no cost to the main loop's cache;
 // it is routed once, on its first request, from the task it was given. One whose first request carries more
 // than that task (a fork, which shares its parent's context and cache) is left alone, as is a missed classification.
-const routeAgent = async ($: $, agentId: string, messageCount: number) => {
+const routeAgent = async ($: $, agentId: string, messageCount: number, model?: null) => {
   if (messageCount !== 1) return null
   const messages = await $.session.messages({ agentId })
   const task = Array.isArray(messages) ? messages.find(m => m.role === 'user')?.text : undefined
   const found = task ? await classify($, task) : undefined
-  return found === undefined ? null : routeFor(found)
+  return found === undefined ? null : routeFor(found, model)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // userConfig `model: keep` never picks a model, for the main loop or its subagents: the session stays on
+  // the one you chose and only effort is routed.
+  const kept = options.model === 'keep' ? null : undefined
+
   // Start the shared daemon if no session has: it outlives this one, so only the first session after a
   // reboot pays the model load (~10s; the first run ever also installs torch and downloads the weights).
   on('session.start', async ($, e, next) => {
@@ -117,7 +121,7 @@ export const register: Register = on => {
     }
 
     const last = await read($, route)
-    const chosen = routeFor(found, picked ? (last?.model ?? null) : undefined)
+    const chosen = routeFor(found, picked ? (last?.model ?? null) : kept)
     await update($, isPicked, () => true)
     await update($, route, () => chosen)
     await update($, isHidden, () => false)
@@ -135,7 +139,7 @@ export const register: Register = on => {
       const id = e.agentId
       let mine = (await read($, agents))[id]
       if (mine === undefined) {
-        mine = await routeAgent($, id, e.messageCount)
+        mine = await routeAgent($, id, e.messageCount, kept)
         await update($, agents, a => ({ ...a, [id]: mine! }))
       }
       if (mine === null) return yield* next(e)

@@ -126,7 +126,7 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 - **Subagents**: each one is classified once, on its first request, and keeps that route. Only what it would inherit from the session is rewritten: a model or effort set by the Agent call or the agent's definition is kept. Forks are left alone, because they share their parent's context and prompt cache.
 - **`/model`, `/effort`, or a fallback**: if any of these changes what the engine asks for, the router stops rewriting for the rest of the session.
 - **Classifier unreachable on the first prompt**: the session keeps its own model, and effort routing starts once the daemon answers.
-- **`/clear`**: the next prompt picks a model again.
+- **`/clear`**: the next prompt picks a model again (unless [Model routing](#configuration) is `keep`).
 
 ## Privacy
 
@@ -149,6 +149,8 @@ Nothing needs configuring. These environment variables change the defaults:
 | `TUNE_HOST` | none | An ssh host with an NVIDIA GPU to [tune](#tune-it-to-your-prompts) on. |
 | `AA_API_KEY` | none | [Artificial Analysis](https://artificialanalysis.ai/api) key for `just benchmarks`. |
 | `OPENROUTER_KEY`, `FASTINO_API_KEY` | none | Hosted-model keys for `just bench`. |
+
+To route **effort only** and never change the model, set the plugin's **Model routing** option to `keep` (in `/config`, or `pluginConfigs["magic-router"].options.model` in settings). The session and its subagents stay on whatever model you picked, and the band shows "session model". The default, `route`, lets the first prompt pick.
 
 Weights and thresholds are constants in [`hooks/route.ts`](hooks/route.ts). Fable 5.1 is wired in but off: set `FABLE_AT` there to a score above `OPUS_AT` to send the hardest first prompts to it.
 
