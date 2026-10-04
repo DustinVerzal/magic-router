@@ -5,9 +5,13 @@ set dotenv-load
 benchmarks *models:
     uv run --script scripts/benchmarks.py {{models}}
 
-# Label your newest prompts with Opus and train the classifier's effort answer on them (scripts/tune.py). Arg: how many prompts, default 500.
+# Label your Claude Code and Codex prompts with Opus and train the classifier's effort answer on them (scripts/tune.py). Arg: cap on how many newest prompts, default all.
 tune *limit:
     uv run --script scripts/tune.py {{limit}}
+
+# Benchmark the adapter from `just tune` against hosted decision models on the held-out prompts, without retraining. OPENROUTER_KEY adds Jev, FASTINO_API_KEY adds GLiDE; each gets those prompts.
+bench:
+    uv run --script scripts/tune.py --bench
 
 # Routing tests.
 test:

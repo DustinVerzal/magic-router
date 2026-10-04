@@ -8,6 +8,9 @@
 #   scripts/gliner.sh status   print /health
 #   scripts/gliner.sh check    run the classifier's offline self-check
 #   scripts/gliner.sh logs     follow the daemon log
+#   scripts/gliner.sh remote HOST   run the daemon on an ssh host (a GPU box) instead, through a tunnel (macOS)
+#   scripts/gliner.sh local    run it here again
+# After `remote`, setup/start/stop/check/logs act on that host, and start copies your tuned adapter there.
 set -eu
 
 # shellcheck disable=SC1007  # empty CDPATH is deliberate
@@ -16,6 +19,10 @@ SERVER="$ROOT/server/classifier.py"
 URL=http://127.0.0.1:8765 # ponytail: fixed, matches DAEMON in hooks/register.tsx
 LOG="$HOME/.cache/model-router/classifier.log"
 WAIT=${ROUTER_WAIT:-900} # seconds; the first run downloads ~1.7 GB of torch and weights
+
+HOSTFILE="$HOME/.cache/model-router/host" # written by `remote`
+HOST=$(cat "$HOSTFILE" 2>/dev/null || true)
+AGENT="$HOME/Library/LaunchAgents/dev.magic-router.tunnel.plist"
 
 health() { curl -fsS -m 2 "$URL/health" 2>/dev/null; }
 
@@ -43,7 +50,64 @@ start() {
   echo "ready: $(health)"
 }
 
+# Run this script's command on $HOST, from a copy of this checkout, with your tuned adapter (or none) copied there.
+on_host() {
+  ssh "$HOST" 'mkdir -p .cache/model-router/repo'
+  rsync -a --delete --exclude .git "$ROOT/" "$HOST:.cache/model-router/repo/"
+  if [ -d "$HOME/.cache/model-router/tuned" ]; then
+    rsync -a --delete "$HOME/.cache/model-router/tuned/" "$HOST:.cache/model-router/tuned/"
+  else
+    ssh "$HOST" 'rm -rf .cache/model-router/tuned'
+  fi
+  ssh "$HOST" "sh .cache/model-router/repo/scripts/gliner.sh $1"
+}
+
+# A launch agent keeps the daemon's port forwarded to $HOST's, so the mod reaches it at the same URL.
+# ponytail: no ExitOnForwardFailure, since a DynamicForward in your ssh config may be held by another ssh. So if a
+# session started a local daemon while $HOST was down, it keeps the port: stop it with `pkill -f server/classifier.py`.
+tunnel() {
+  mkdir -p "$(dirname "$AGENT")"
+  cat >"$AGENT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>dev.magic-router.tunnel</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/ssh</string><string>-N</string><string>-o</string><string>BatchMode=yes</string>
+    <string>-o</string><string>ServerAliveInterval=15</string><string>-o</string><string>ServerAliveCountMax=3</string>
+    <string>-L</string><string>8765:127.0.0.1:8765</string><string>$HOST</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardErrorPath</key><string>$HOME/.cache/model-router/tunnel.log</string>
+</dict></plist>
+EOF
+  launchctl unload "$AGENT" 2>/dev/null || true
+  launchctl load "$AGENT"
+}
+
 case "${1:-}" in
+  setup | start | stop | check | logs) [ -z "$HOST" ] || { on_host "$1"; exit; } ;;
+esac
+
+case "${1:-}" in
+  remote)
+    [ -n "${2:-}" ] || { echo "usage: scripts/gliner.sh remote HOST" >&2; exit 2; }
+    HOST=$2
+    on_host setup # the first time, installs uv, torch and the weights there; then starts the daemon
+    mkdir -p "$(dirname "$HOSTFILE")"
+    echo "$HOST" >"$HOSTFILE"
+    pkill -f server/classifier.py && echo "stopped the local daemon" || true # it would hold the tunnel's port
+    tunnel
+    sleep 3
+    echo "through the tunnel: $(health || echo 'not up yet; see ~/.cache/model-router/tunnel.log')"
+    ;;
+  local)
+    launchctl unload "$AGENT" 2>/dev/null || true
+    rm -f "$AGENT" "$HOSTFILE"
+    echo "the daemon runs here again: it starts with your next session, or now with scripts/gliner.sh start"
+    ;;
   setup)
     if ! command -v uv >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/uv" ]; then
       echo "installing uv (https://astral.sh/uv)"
@@ -63,5 +127,5 @@ case "${1:-}" in
   status) if health; then echo; else echo "not running"; exit 1; fi ;;
   check) need_uv; uv run --script "$SERVER" --check ;;
   logs) mkdir -p "$(dirname "$LOG")"; touch "$LOG"; tail -f "$LOG" ;;
-  *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
