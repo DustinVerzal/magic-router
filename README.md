@@ -111,9 +111,13 @@ scripts/gliner.sh stop     # stop the daemon
 scripts/gliner.sh status   # print /health
 scripts/gliner.sh check    # run the classifier's offline self-check
 scripts/gliner.sh logs     # follow the daemon log
+scripts/gliner.sh remote HOST   # run the daemon on an ssh host instead (macOS), such as a box with a GPU
+scripts/gliner.sh local    # run it here again
 ```
 
 The log is at `~/.cache/model-router/classifier.log`. Without a checkout, stop the daemon with `pkill -f server/classifier.py`.
+
+`remote HOST` copies this checkout and your tuned adapter to `~/.cache/model-router` on the host, starts the daemon there (on its NVIDIA GPU if it has one), and adds a launch agent that forwards port 8765 to it over ssh. The mod keeps calling `127.0.0.1:8765` and needs no change, and your Mac no longer runs the model. After that, `setup`, `start`, `stop`, `check` and `logs` act on the host. The host needs key-based ssh and rsync. If the host is down when a session starts, the mod starts a local daemon, which then holds the port until you stop it.
 
 ## How a prompt is routed
 
@@ -144,14 +148,36 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 
 `just tune` (or `uv run --script scripts/tune.py`) trains the classifier on how you actually work:
 
-1. It reads your newest 500 prompts from `~/.claude/projects`. Slash commands and short follow-ups are skipped, because the router never classifies them.
+1. It reads every prompt you have sent Claude Code or Codex: transcripts in `~/.claude/projects`, older prompts from `~/.claude/history.jsonl`, and your own Codex CLI and desktop threads in `~/.codex` (no subagents, `codex exec` or orchestrators). Slash commands, `$skills` and short follow-ups are skipped, because the router never classifies them. Pass a number (`just tune 500`) to use only your newest prompts.
 2. Opus at xhigh effort labels the effort each prompt needed. It labels 25 prompts per `claude -p` call, with no tools, no settings and no saved session. Each label and a one-line reason go to `~/.cache/model-router/tune/labels.jsonl`, so a rerun only labels new prompts. Skim them there.
-3. It trains a LoRA adapter for the classifier on 70% of your sessions, on CPU.
-4. On the other 30%, it compares the adapter's effort with the score's. If the adapter is closer to the labels, it installs the adapter to `~/.cache/model-router/tuned` and restarts the daemon. Otherwise it changes nothing.
+3. It trains a LoRA adapter for the classifier on 70% of your sessions, on CPU. With `TUNE_HOST=<ssh host> just tune`, it trains and scores on that host instead (one with an NVIDIA GPU, uv and rsync), and deletes the prompts it sent there afterwards.
+4. On the other 30%, it compares the adapter's effort with the score's, and with the adapter already installed, if any. If the new adapter is closer to the labels than both, it installs it to `~/.cache/model-router/tuned` and restarts the daemon. Otherwise it changes nothing.
 
-On 404 prompts, labelling cost $1.19 at API prices and training took 15 minutes on an M-series Mac. On 125 held-out prompts, the adapter matched the label 59% of the time and was off by 0.42 levels on average. The score matched 38% and was off by 0.70.
+On 3,344 prompts (Claude Code and Codex, six months), labelling cost $10.33 at API prices, and training took about 15 minutes on an RTX 4080. On CPU it is too slow, about 15 minutes per 400 prompts. On 972 held-out prompts:
+
+| | Matches label | Mean levels off |
+|---|---|---|
+| Adapter trained on 3,344 prompts | 66% | 0.36 |
+| Adapter trained on 404 Claude Code prompts | 54% | 0.49 |
+| Always `medium` | 44% | 0.59 |
+| The score | 40% | 0.69 |
 
 With an adapter installed, the daemon answers effort from it, which adds a second pass of about 0.1 s. The score still picks the model on a session's first prompt. To undo, delete `~/.cache/model-router/tuned` and run `scripts/gliner.sh stop`.
+
+### Against Jev
+
+`just bench` scores the trained adapter against hosted decision models on those same 972 held-out prompts, without retraining. It sends each prompt's first 2,000 characters to the provider: `OPENROUTER_KEY` adds [Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe), which needs no training. Jev got the labeller's definition of each level, and was asked for the effort directly, as a choice among the five levels and as a score on the ordered scale. A third column puts Jev's answers to the router's own task and signal questions through the score's weights.
+
+| | Matches label | Mean levels off |
+|---|---|---|
+| Tuned adapter | 66% | 0.36 |
+| Jev, effort as a score | 63% | 0.42 |
+| Jev, effort as a choice | 56% | 0.53 |
+| Always `medium` | 44% | 0.59 |
+| The score | 40% | 0.69 |
+| Jev through the score's weights | 27% | 1.06 |
+
+Asked for effort directly, Jev comes within 3 points of the adapter without seeing any of your prompts, and the ordered score beats the choice. The adapter is still ahead, and it was trained on labels from the same labeller, so the margin favors it. It runs locally, while Jev is a hosted call (median 234 ms, $0.049 for all 972 prompts) that sends your prompts to a third party. Jev's answers through the score's weights do worse than guessing `medium`, because those weights were set for GLiNER. Jev does not replace the classifier inside the router as is.
 
 ## When it stands aside
 

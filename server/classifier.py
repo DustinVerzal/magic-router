@@ -36,11 +36,15 @@ def load(adapter=TUNED):
     from gliner2 import AutoExtractor
 
     t = time.perf_counter()
-    model = AutoExtractor.from_pretrained(MODEL_ID)
+    model, tuned = AutoExtractor.from_pretrained(MODEL_ID), None  # tune.py loads one adapter after another
     if (adapter / "adapter_config.json").exists():
         from peft import PeftModel
 
         tuned = PeftModel.from_pretrained(model, str(adapter))
+    import torch
+
+    if torch.cuda.is_available():  # e.g. the daemon on a GPU box, reached through `scripts/gliner.sh remote`
+        model.to("cuda")  # the adapter's layers live inside model, so they move too
     ready.set()
     print(f"loaded {MODEL_ID}{f' + {adapter}' if tuned else ''} in {time.perf_counter() - t:.1f}s", flush=True)
 
