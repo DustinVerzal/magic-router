@@ -172,9 +172,9 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 `just tune` (or `uv run --script scripts/tune.py`) trains the classifier on how you actually work:
 
 1. It reads every prompt you have sent Claude Code or Codex: transcripts in `~/.claude/projects`, older prompts from `~/.claude/history.jsonl`, and your own Codex CLI and desktop threads in `~/.codex` (no subagents, `codex exec` or orchestrators). Slash commands, `$skills` and short follow-ups are skipped, because the router never classifies them. Pass a number (`just tune 500`) to use only your newest prompts.
-2. Opus at xhigh effort labels the effort each prompt needed. It labels 25 prompts per `claude -p` call, with no tools, no settings and no saved session. Each label and a one-line reason go to `~/.cache/magic-router/tune/labels.jsonl`, so a rerun only labels new prompts. Skim them there.
+2. Opus at xhigh effort labels the model (Sonnet or Opus) and the effort each prompt needed, with the [Artificial Analysis](#benchmarks) scores and response times for both models at every effort in its prompt, and is asked for the best answer without overthinking, not the cheapest (run `just benchmarks` first). It labels 25 prompts per `claude -p` call, with no tools, no settings and no saved session. Each label and a one-line reason go to `~/.cache/magic-router/tune/labels.jsonl`, so a rerun only labels new prompts, and any labelled under an older labeller prompt. Skim them there.
 3. It trains a LoRA adapter for the classifier on 70% of your sessions, on CPU. With `TUNE_HOST=<ssh host> just tune`, it trains and scores on that host instead (one with an NVIDIA GPU, uv and rsync), and deletes the prompts it sent there afterwards.
-4. On the other 30%, it compares the adapter's effort with the score's, and with the adapter already installed, if any. If the new adapter is closer to the labels than both, it installs it to `~/.cache/magic-router/tuned` and restarts the daemon. Otherwise it changes nothing.
+4. On the other 30%, it compares the adapter's effort and model with the score's, and its effort with the adapter already installed, if any. If the new adapter is closer to the labels than both on effort and picks the model no worse than the score, it installs it to `~/.cache/magic-router/tuned` and restarts the daemon. Otherwise it changes nothing.
 
 The numbers below are from the author's own history, so yours will differ. On 3,344 prompts (Claude Code and Codex, six months), labelling cost $10.33 at API prices, and training took about 15 minutes on an RTX 4080. On CPU it is too slow, about 15 minutes per 400 prompts. On 972 held-out prompts:
 
@@ -185,7 +185,7 @@ The numbers below are from the author's own history, so yours will differ. On 3,
 | Always `medium` | 44% | 0.59 |
 | The score | 40% | 0.69 |
 
-With an adapter installed, the daemon answers effort from it, which adds a second pass of about 0.1 s. The score still picks the model on a session's first prompt. To undo, delete `~/.cache/magic-router/tuned` and run `scripts/gliner.sh stop`.
+With an adapter installed, the daemon answers effort and model from it, which adds a second pass of about 0.1 s. The model is still picked once, on a session's first prompt, and a score at `FABLE_AT` still goes to Fable. An adapter trained before the model was labelled answers effort only: retune to get both. The numbers below are for effort. To undo, delete `~/.cache/magic-router/tuned` and run `scripts/gliner.sh stop`.
 
 <details id="against-jev">
 <summary><b>Against Jev</b>: the adapter versus a hosted decision model</summary>

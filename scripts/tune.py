@@ -2,7 +2,7 @@
 # requires-python = ">=3.10,<3.14"
 # dependencies = ["gliner2[local,train]>=2,<3"]
 # ///
-"""Tune the classifier's effort answer to your own prompts.
+"""Tune the classifier's model and effort answers to your own prompts.
 
     uv run --script scripts/tune.py [how many of your newest prompts, default all]      (or: just tune)
 
@@ -10,15 +10,17 @@
    prompts whose transcripts are gone from ~/.claude/history.jsonl, and your own Codex CLI and desktop threads in
    ~/.codex (no subagents, `codex exec` or orchestrators). Only the kind the router classifies: no slash commands,
    $skills or shell escapes, and no follow-ups under FOLLOW_UP_WORDS.
-2. Opus at xhigh effort labels the effort each one needed, 25 per `claude -p` call (no tools, settings or
+2. Opus at xhigh effort labels the model (Sonnet or Opus) and effort each one needed, given the Artificial Analysis
+   scores for each model at each effort (`just benchmarks` caches them), 25 per `claude -p` call (no tools, settings or
    saved session; about $0.30 per 100 prompts at API prices). Labels are kept in
-   ~/.cache/magic-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts; skim them there.
+   ~/.cache/magic-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts (and those
+   labelled under an older labeller prompt); skim them there.
 3. Trains a LoRA adapter for the classifier on 70% of your sessions: on this machine's CPU (about 15 min for 400
    prompts), or over ssh on a machine with an NVIDIA GPU and uv with TUNE_HOST=<ssh host> just tune, which
    scores the held-out prompts there too.
-4. On the other 30%, compares the adapter's effort with the router's current one (the score in hooks/route.ts).
-   If the adapter is closer to the labels, installs it to ~/.cache/magic-router/tuned and restarts the daemon,
-   which then answers effort from it. To undo: delete that directory and run `scripts/gliner.sh stop`.
+4. On the other 30%, compares the adapter's effort and model with the router's current ones (the score in
+   hooks/route.ts). If the adapter is closer on effort and no worse on model, installs it to
+   ~/.cache/magic-router/tuned and restarts the daemon, which then answers both from it. To undo: delete that directory and run `scripts/gliner.sh stop`.
 
     uv run --script scripts/tune.py --bench                                              (or: just bench)
 
@@ -65,13 +67,16 @@ def block(name):
 
 TASKS, SIGNALS, WEIGHTS, BIAS = map(block, ["TASKS", "SIGNALS", "SIGNAL_WEIGHTS", "TASK_BIAS"])
 EFFORTS = [(float(lo.replace("Infinity", "inf")), e) for lo, e in re.findall(r"\[(-?Infinity|[\d.]+), '(\w+)'\]", ROUTE)]
+OPUS_AT = float(re.search(r"OPUS_AT = (-?[\d.]+)", ROUTE)[1])
+LABELLER = 2  # bump when the labeller prompt changes meaning: older labels are redone
+PICKS = ["sonnet", "opus"]  # what the adapter chooses between; Fable stays the score's (FABLE_AT) once it is on
 FOLLOW_UP_WORDS = int(re.search(r"FOLLOW_UP_WORDS = (\d+)", ROUTE)[1])
 
 
 def current(found):
-    """The effort hooks/route.ts gives this classification: score() and effortFor() there."""
+    """The effort and model hooks/route.ts gives this classification: score(), effortFor() and modelFor() there."""
     s = sum(found["flags"][k] * w for k, w in WEIGHTS.items()) + sum(found["choose"][k] * b for k, b in BIAS.items())
-    return next(e for lo, e in EFFORTS if s >= lo)
+    return next(e for lo, e in EFFORTS if s >= lo), "opus" if s >= OPUS_AT else "sonnet"
 
 
 def text_of(message):
@@ -175,10 +180,39 @@ def prompts():
     return found[:LIMIT]
 
 
+AA = HOME / ".cache/magic-router/benchmarks.json"  # scripts/benchmarks.py's cache of the Artificial Analysis API
+AA_EVALS = {"artificial_analysis_intelligence_index": "AA index", "hle": "reasoning (HLE)",
+            "terminalbench_v4_0": "agentic coding (Terminal-Bench)", "scicode": "scientific coding (SciCode)",
+            "lcr": "long context (AA-LCR)"}
+
+
+def aa_table():
+    """The Sonnet and Opus versions the router picks between, at every effort level, one line each from AA's scores and speeds."""
+    if not AA.exists():
+        return ""
+    ours = {n: f"{a}.{b}" for n, a, b in re.findall(r"'claude-(sonnet|opus)-(\d+)-(\d+)'", ROUTE)}
+    lines = []
+    for m in json.loads(AA.read_text())["data"]:
+        got = re.match(r"Claude (Sonnet|Opus) ([\d.]+) \((\w+)", m["name"])
+        if got and ours.get(got[1].lower()) == got[2] and got[3].lower() in LEVELS:
+            ev, price = m.get("evaluations", {}), m.get("pricing", {})
+            scores = ", ".join(f"{AA_EVALS[k]} {ev[k]:.3g}" for k in AA_EVALS if k in ev)
+            lines.append((got[1].lower(), LEVELS.index(got[3].lower()), f"{got[1].lower()} at {got[3].lower()}: {scores}"
+                          f"; first answer token after {m['median_time_to_first_answer_token']:.0f}s, "
+                          f"then {m['median_output_tokens_per_second']:.0f} tokens/s"))
+    return "\n\nArtificial Analysis scores (the AA index is 0-100, the evals 0-1) and speeds:\n" + "\n".join(l for *_, l in sorted(lines))
+
+
 SYSTEM = """You label prompts a developer sent to an AI coding agent (Claude Code or Codex) working in their \
-repository, with the effort level Claude should answer each one at. Effort sets how long Claude thinks and how \
-thorough it is. Higher effort is slower and costs more, so the right level is the lowest one at which a strong \
-model reliably does the job well.
+repository, with the model and the effort level Claude should answer each one at. Effort sets how long Claude \
+thinks and how thorough it is. The developer cares about the quality of the answer and about not waiting on \
+overthinking, not about cost: pick the pair with the best expected answer quality that does not make them wait \
+for thinking the prompt did not need. Higher effort and Opus are slower (see the time to first answer token \
+below), so spend the wait only where it buys a better answer.
+
+Model: sonnet or opus. Use opus where the AA scores below show it ahead of Sonnet on the kind of work the \
+prompt is, or where the prompt rests on judgment, design or hard reasoning. Use sonnet where the two are level, \
+or where Opus's lead is not worth its longer wait. A high effort on Sonnet can beat a lower one on Opus. {aa}
 
 low: reflexive. A quick factual answer, running a known command, a one-line or mechanical edit, a rename.
 medium: routine, with an obvious path. A small fix or feature in one place, a short explanation, a standard \
@@ -195,12 +229,15 @@ the agent made answering it (null when unknown). Judge what the prompt needed, n
 tool-call count hints at scope, but routine work can take many calls and a hard question none. Give each a \
 one-line reason."""
 
+SYSTEM = SYSTEM.replace("{aa}", aa_table())
+
 SCHEMA = json.dumps({
     "type": "object",
     "properties": {"labels": {"type": "array", "items": {
         "type": "object",
-        "properties": {"id": {"type": "integer"}, "effort": {"enum": LEVELS}, "reason": {"type": "string"}},
-        "required": ["id", "effort", "reason"],
+        "properties": {"id": {"type": "integer"}, "model": {"enum": PICKS}, "effort": {"enum": LEVELS},
+                       "reason": {"type": "string"}},
+        "required": ["id", "model", "effort", "reason"],
     }}},
     "required": ["labels"],
 })
@@ -267,11 +304,13 @@ def decide(name, text):
             time.sleep(tries * 2)
     a = out["answers"]
     found = {"choose": {k: a["task"]["probabilities"].get(k, 0) for k in TASKS}, "flags": {k: a[k]["noul"] for k in SIGNALS}}
-    return {"choice": a["choice"]["choice"], "score": LEVELS[round(sum(int(k) * p for k, p in a["score"]["probabilities"].items()))], "router": current(found),
+    return {"choice": a["choice"]["choice"], "score": LEVELS[round(sum(int(k) * p for k, p in a["score"]["probabilities"].items()))], "router": current(found)[0],
             "ms": (time.perf_counter() - t) * 1000, "cost": out["usage"].get("cost", 0)}
 
 
 def train(rows, out):
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # less fragmentation on a 16 GB card
+    import torch
     from gliner2 import AutoExtractor
     from gliner2.processor import SamplingConfig
     from gliner2.training import Classification, GLiNER2Trainer, InputExample, TrainingConfig
@@ -281,26 +320,29 @@ def train(rows, out):
     # hundred examples on schemas the router never sends.
     model.processor.sampling_config = SamplingConfig(remove_classification_label_prob=0, synthetic_label_prob=0)
     examples = [InputExample(text=r["text"][:2000], classifications=[
-        Classification(task="effort", labels=LEVELS, true_label=[r["effort"]], multi_label=True)]) for r in rows]
+        Classification(task="effort", labels=LEVELS, true_label=[r["effort"]], multi_label=True),
+        Classification(task="model", labels=PICKS, true_label=[r["model"]], multi_label=True)]) for r in rows]
     # ponytail: CPU only (gliner2's trainer picks CUDA or CPU); fixed epochs, no search, so held-out stays honest.
-    # Batches of 8 as 2 x 4, in bf16 on a GPU (the trainer drops it on CPU): a GPU that runs out of memory
-    # spills to system RAM and crawls.
-    config = TrainingConfig(output_dir=str(out), num_epochs=6, batch_size=4, gradient_accumulation_steps=2,
+    # Batches of 8 as 4 x 2, in bf16 on a GPU only. 2 x 4 ran out of memory on a 16 GB card once each prompt had
+    # two tasks, and a GPU that runs out of memory spills to system RAM and crawls.
+    config = TrainingConfig(output_dir=str(out), num_epochs=6, batch_size=2, gradient_accumulation_steps=4,
                             use_lora=True, lora_r=16, lora_alpha=32,
-                            encoder_lr=2e-4, task_lr=2e-4, eval_strategy="no", save_best=False, fp16=False, bf16=True,
+                            encoder_lr=2e-4, task_lr=2e-4, eval_strategy="no", save_best=False, fp16=False, bf16=torch.cuda.is_available(),
                             num_workers=0, pin_memory=False, logging_steps=10)
     GLiNER2Trainer(model=model, config=config).train(train_data=examples)
 
 
 def answers(adapter, test):
-    """For each held-out prompt, the router's effort from the score and the adapter's effort."""
+    """For each held-out prompt, the router's effort and model from the score, then the adapter's effort and model."""
     classifier.load(adapter)
     found = []
     for i, r in enumerate(test, 1):
-        found.append(classifier.classify(r["text"][:2000], TASKS, SIGNALS, LEVELS))
+        found.append(classifier.classify(r["text"][:2000], TASKS, SIGNALS, LEVELS, PICKS))
         if i % 100 == 0:
             print(f"  scored {i}/{len(test)}")
-    return [current(f) for f in found], [max(f["effort"], key=f["effort"].get) for f in found]
+    top = lambda f, k: max(f[k], key=f[k].get)  # noqa: E731
+    return ([current(f)[0] for f in found], [top(f, "effort") for f in found],
+            [current(f)[1] for f in found], [top(f, "pick") if "pick" in f else None for f in found])  # an older adapter has none
 
 
 REMOTE = ".cache/magic-router/repo"  # this checkout's copy on TUNE_HOST, under its home; gliner.sh remote uses it too
@@ -335,7 +377,10 @@ if sys.argv[1:2] == ["--score"]:  # on TUNE_HOST, from remote(): tune.py --score
 WORK.mkdir(parents=True, exist_ok=True)
 rows = prompts()
 labels = {d["text"]: d for d in map(json.loads, LABELS.open())} if LABELS.exists() else {}
-todo = [] if BENCH else [r for r in rows if r["text"] not in labels]  # a benchmark never spends on labels
+# A benchmark never spends on labels; labels from an older labeller prompt are redone.
+todo = [] if BENCH else [r for r in rows if labels.get(r["text"], {}).get("v") != LABELLER]
+if todo and not AA.exists():
+    sys.exit("the labeller needs the Artificial Analysis scores: run `just benchmarks` first (it needs AA_API_KEY)")
 print(f"{len(rows)} prompts; labelling {len(todo)} new ones with Opus at xhigh, {BATCH} per call")
 cost = 0
 with ThreadPoolExecutor(4) as pool, LABELS.open("a") as f:
@@ -343,17 +388,17 @@ with ThreadPoolExecutor(4) as pool, LABELS.open("a") as f:
         got, c = job.result()
         cost += c
         for text, g in got.items():
-            labels[text] = {"text": text, "effort": g["effort"], "reason": g["reason"]}
+            labels[text] = {"text": text, "v": LABELLER, "model": g["model"], "effort": g["effort"], "reason": g["reason"]}
             f.write(json.dumps(labels[text], ensure_ascii=False) + "\n")
         f.flush()
         print(f"  {sum(r['text'] in labels for r in rows)}/{len(rows)} labelled, ${cost:.2f}", flush=True)
 
-rows = [{**r, "effort": labels[r["text"]]["effort"]} for r in rows if r["text"] in labels]
+rows = [{**r, **{k: labels[r["text"]][k] for k in ("effort", "model")}} for r in rows if labels.get(r["text"], {}).get("v") == LABELLER or (BENCH and "model" in labels.get(r["text"], {}))]
 if len(rows) < 100:
     sys.exit(f"only {len(rows)} labelled prompts; tuning needs at least 100")
 held = lambda r: int(hashlib.sha1(r["session"].encode()).hexdigest(), 16) % 10 < 3  # whole sessions, so no leaks
 fit, test = [r for r in rows if not held(r)], [r for r in rows if held(r)]
-print(f"labels: {dict(Counter(r['effort'] for r in rows))}")
+print(f"labels: {dict(Counter(r['effort'] for r in rows))}, {dict(Counter(r['model'] for r in rows))}")
 print(f"training on {len(fit)} prompts, holding out {len(test)} from other sessions")
 
 run = WORK / "run"
@@ -373,6 +418,7 @@ else:
         remote("--train", {"fit.json": WORK / "fit.json"}, ["run"])
     else:
         train(fit, run)
+    (run / "final/tasks.json").write_text('["effort", "model"]')  # tells the daemon this adapter's model answer is trained
 
 
 common = Counter(r["effort"] for r in fit).most_common(1)[0][0]
@@ -389,18 +435,26 @@ if HOST:
 else:
     got = {n: answers(path, test) for n, path in adapters.items()}
 cols = {"current router": got["tuned"][0], "tuned adapter": got["tuned"][1]}
+picks = {"current router": got["tuned"][2], "tuned adapter": got["tuned"][3]}
 if "installed" in got:
     cols["installed adapter"] = got["installed"][1]
 if BENCH:
     for n, js in answered.items():
         cols |= {f"{n} ({k})": [j[k] for j in js] for k in ("choice", "score", "router")}
 cols[f"always {common}"] = [common] * len(test)
+likely = Counter(r["model"] for r in fit).most_common(1)[0][0]
+picks[f"always {likely}"] = [likely] * len(test)
 
 off = {n: sum(abs(LEVELS.index(r["effort"]) - LEVELS.index(e)) for r, e in zip(test, c)) / len(test)
        for n, c in cols.items()}
 print(f"\nheld out ({len(test)} prompts)   matches label   mean levels off")
 for n, c in cols.items():
     print(f"  {n:<18} {sum(r['effort'] == e for r, e in zip(test, c)) / len(test):>13.0%} {off[n]:>17.2f}")
+
+hit = {n: sum(r["model"] == m for r, m in zip(test, c)) / len(test) for n, c in picks.items()}
+print(f"\nheld out model ({dict(Counter(r['model'] for r in test))})   matches label")
+for n, h in hit.items():
+    print(f"  {n:<18} {h:>13.0%}")
 
 if BENCH:
     for n, js in answered.items():
@@ -411,6 +465,8 @@ if BENCH:
 beaten = [n for n in ("current router", "installed adapter") if n in off and off[n] <= off["tuned adapter"]]
 if beaten:
     sys.exit(f"\nThe adapter is no closer to the labels than the {beaten[0]}: not installed.")
+if hit["current router"] > hit["tuned adapter"]:
+    sys.exit("\nThe adapter picks the model worse than the current router: not installed.")
 shutil.rmtree(classifier.TUNED, ignore_errors=True)
 shutil.copytree(run / "final", classifier.TUNED)
 print(f"\ninstalled to {classifier.TUNED}; restarting the daemon")
