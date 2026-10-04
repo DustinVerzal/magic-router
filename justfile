@@ -5,7 +5,7 @@ set dotenv-load
 benchmarks *models:
     uv run --script scripts/benchmarks.py {{models}}
 
-# Label your Claude Code and Codex prompts with Opus and train the classifier's effort answer on them (scripts/tune.py). Arg: cap on how many newest prompts, default all.
+# Label your Claude Code and Codex prompts with Opus and train the classifier's model and effort answers on them (run `just benchmarks` first: its AA scores go into the labeller's prompt) (scripts/tune.py). Arg: cap on how many newest prompts, default all.
 tune *limit:
     uv run --script scripts/tune.py {{limit}}
 

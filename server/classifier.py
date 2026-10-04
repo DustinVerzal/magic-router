@@ -27,12 +27,13 @@ TUNED = Path.home() / ".cache/model-router/tuned"  # a LoRA adapter trained on y
 
 model = None
 tuned = None  # model with the adapter, when there is one
+picks = False  # whether the adapter was trained to choose the model too (tasks.json); an effort-only one is not asked
 ready = threading.Event()
 lock = threading.Lock()  # ponytail: one inference at a time; ~0.3s each, fine for a handful of sessions
 
 
 def load(adapter=TUNED):
-    global model, tuned
+    global model, tuned, picks
     from gliner2 import AutoExtractor
 
     t = time.perf_counter()
@@ -41,6 +42,8 @@ def load(adapter=TUNED):
         from peft import PeftModel
 
         tuned = PeftModel.from_pretrained(model, str(adapter))
+    marker = adapter / "tasks.json"
+    picks = tuned is not None and marker.exists() and "model" in marker.read_text()
     import torch
 
     if torch.cuda.is_available():  # e.g. the daemon on a GPU box, reached through `scripts/gliner.sh remote`
@@ -62,16 +65,18 @@ def distribution(scores):
     return {k: v / total for k, v in exp.items()}
 
 
-def classify(text, choose, flags, effort=None):
-    """choose and flags always come from the base model. The adapter, trained on effort alone, would shift them,
-    so it answers effort in a second pass (~0.13s); the base model's own effort answer is near flat, so none without one."""
+def classify(text, choose, flags, effort=None, pick=None):
+    """choose and flags always come from the base model. The adapter, trained on effort and model, would shift them,
+    so it answers those in a second pass (~0.13s); the base model's own answers are near flat, so none without one."""
     spec = lambda labels: {"labels": labels, "multi_label": True, "cls_threshold": 0.0}
     with lock:
         with tuned.disable_adapter() if tuned else nullcontext():
             out = model.classify_text(text, {"choose": spec(choose), "flags": spec(flags)}, include_confidence=True)
         result = {"choose": distribution(out["choose"]), "flags": {d["label"]: d["confidence"] for d in out["flags"]}}
-        if tuned and effort:
-            result["effort"] = distribution(model.classify_text(text, {"effort": spec(effort)}, include_confidence=True)["effort"])
+        asked = {k: spec(v) for k, v in (("effort", effort), ("model", pick if picks else None)) if v}
+        if tuned and asked:
+            out = model.classify_text(text, asked, include_confidence=True)
+            result |= {("pick" if k == "model" else k): distribution(v) for k, v in out.items()}
     return result
 
 
@@ -79,7 +84,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/health":
             return self.reply(404, {"error": "not found"})
-        self.reply(200, {"ready": ready.is_set(), "model": MODEL_ID, "tuned": tuned is not None})
+        self.reply(200, {"ready": ready.is_set(), "model": MODEL_ID, "tuned": tuned is not None, "picks": picks})
 
     def do_POST(self):
         if self.path != "/classify":
@@ -87,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             text, choose, flags = str(body["text"]), dict(body["choose"]), dict(body["flags"])
-            effort = list(body.get("effort") or [])
+            effort, pick = list(body.get("effort") or []), list(body.get("pick") or [])
             if len(choose) < 2 or len(flags) < 2:
                 raise ValueError("choose and flags need at least two labels each")
         except (ValueError, KeyError, TypeError) as err:
@@ -95,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
         if not ready.wait(30):
             return self.reply(503, {"error": "model still loading"})
         t = time.perf_counter()
-        result = classify(text, choose, flags, effort)
+        result = classify(text, choose, flags, effort, pick)
         self.reply(200, {**result, "ms": round((time.perf_counter() - t) * 1000)})
 
     def reply(self, status, obj):
