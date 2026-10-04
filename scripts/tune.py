@@ -9,18 +9,22 @@
 1. Reads every prompt you have sent Claude Code or Codex: Claude Code transcripts in ~/.claude/projects, older
    prompts whose transcripts are gone from ~/.claude/history.jsonl, and your own Codex CLI and desktop threads in
    ~/.codex (no subagents, `codex exec` or orchestrators). Only the kind the router classifies: no slash commands,
-   $skills or shell escapes, and no follow-ups under FOLLOW_UP_WORDS.
+   $skills or shell escapes, and no follow-ups under FOLLOW_UP_WORDS (a session's first prompt stays however short,
+   since it picks the model).
 2. Opus at xhigh effort labels the model (Sonnet or Opus) and effort each one needed, given the Artificial Analysis
    scores for each model at each effort (`just benchmarks` caches them), 25 per `claude -p` call (no tools, settings or
    saved session; about $0.30 per 100 prompts at API prices). Labels are kept in
    ~/.cache/magic-router/tune/labels.jsonl with a reason each, so a rerun only labels new prompts (and those
    labelled under an older labeller prompt); skim them there.
-3. Trains a LoRA adapter for the classifier on 70% of your sessions: on this machine's CPU (about 15 min for 400
-   prompts), or over ssh on a machine with an NVIDIA GPU and uv with TUNE_HOST=<ssh host> just tune, which
-   scores the held-out prompts there too.
-4. On the other 30%, compares the adapter's effort and model with the router's current ones (the score in
-   hooks/route.ts). If the adapter is closer on effort and no worse on model, installs it to
-   ~/.cache/magic-router/tuned and restarts the daemon, which then answers both from it. To undo: delete that directory and run `scripts/gliner.sh stop`.
+3. Trains a LoRA adapter for the classifier on 70% of your sessions, whole, so related prompts never sit on both sides
+   of the split: effort on every prompt, and the model on each session's first prompt only, labelled with what the
+   whole session needed (Opus if any of its prompts did), because the router picks the model there and keeps it. On
+   this machine's CPU (about 15 min for 400 prompts), or over ssh on a machine with an NVIDIA GPU and uv with
+   TUNE_HOST=<ssh host> just tune, which scores the held-out prompts there too.
+4. On the other 30%, compares the adapter's effort (on every prompt) and model (on each session's first prompt) with
+   the router's current ones (the score in hooks/route.ts). If the adapter is closer on effort and no worse on model,
+   installs it to ~/.cache/magic-router/tuned and restarts the daemon, which then answers both from it. To undo:
+   delete that directory and run `scripts/gliner.sh stop`.
 
     uv run --script scripts/tune.py --bench                                              (or: just bench)
 
@@ -119,7 +123,8 @@ def claude():
             elif d.get("type") == "user" and (t := text_of(m)) is not None:
                 t, cur = t.strip(), None
                 if asked(t):
-                    cur = {"session": f.stem, "text": t, "prev": prev, "tools": 0, "ts": d.get("timestamp", "")}
+                    cur = {"session": f.stem, "text": t, "prev": prev, "first": not prev, "tools": 0,
+                           "ts": d.get("timestamp", "")}
                     prev = t
                     yield cur
 
@@ -139,7 +144,7 @@ def claude_history():
         s = d.get("sessionId") or d.get("project", "")
         t = re.sub(r"\[Pasted text #(\d+)[^\]]*\]", lambda m: pasted(d, m[1]) or m[0], d.get("display", "")).strip()
         if s not in kept and asked(t):
-            yield {"session": s, "text": t, "prev": prev.get(s, ""), "tools": None,
+            yield {"session": s, "text": t, "prev": prev.get(s, ""), "first": s not in prev, "tools": None,
                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(d.get("timestamp", 0) / 1000))}
             prev[s] = t
 
@@ -162,8 +167,8 @@ def codex():
                 t = "\n".join(c.get("text", "") for c in item.get("content", []) if c.get("type") == "text")
                 t, cur = t.split("## My request for Codex:")[-1].strip(), None  # the IDE prefixes open files
                 if asked(t):
-                    cur = {"session": meta.get("session_id") or meta.get("id"), "text": t, "prev": prev, "tools": 0,
-                           "ts": d.get("timestamp", "")}
+                    cur = {"session": meta.get("session_id") or meta.get("id"), "text": t, "prev": prev,
+                           "first": not prev, "tools": 0, "ts": d.get("timestamp", "")}
                     prev = t
                     yield cur
             elif cur and item.get("type") in CODEX_TOOLS:
@@ -171,11 +176,15 @@ def codex():
 
 
 def prompts():
-    """Your newest prompts the router would classify, each with the prompt before it and the tool calls it took."""
+    """Your newest prompts the router would classify, each with the prompt before it and the tool calls it took.
+    A session's first prompt is kept however short: the router classifies it, and it picks the session's model."""
     seen, found = set(), []
     for r in sorted([*claude(), *claude_history(), *codex()], key=lambda r: r["ts"], reverse=True):
-        if len(r["text"].split()) >= FOLLOW_UP_WORDS and r["text"] not in seen:  # resumed sessions repeat their history
-            seen.add(r["text"])
+        # Resumed sessions repeat their history, so a prompt is kept once; an opener once per session, so that two
+        # sessions both opening on "fix the typo" each keep the prompt that picked their model.
+        key = (r["session"], r["text"]) if r["first"] else r["text"]
+        if (r["first"] or len(r["text"].split()) >= FOLLOW_UP_WORDS) and key not in seen:
+            seen.add(key)
             found.append(r)
     return found[:LIMIT]
 
@@ -319,9 +328,11 @@ def train(rows, out):
     # Pretraining's augmentation (synthetic label names, dropping the true label) would spend half of a few
     # hundred examples on schemas the router never sends.
     model.processor.sampling_config = SamplingConfig(remove_classification_label_prob=0, synthetic_label_prob=0)
+    # The model is asked only of a session's first prompt, so only first prompts teach it.
     examples = [InputExample(text=r["text"][:2000], classifications=[
         Classification(task="effort", labels=LEVELS, true_label=[r["effort"]], multi_label=True),
-        Classification(task="model", labels=PICKS, true_label=[r["model"]], multi_label=True)]) for r in rows]
+        *[Classification(task="model", labels=PICKS, true_label=[r["model"]], multi_label=True)] * r["first"]])
+        for r in rows]
     # ponytail: CPU only (gliner2's trainer picks CUDA or CPU); fixed epochs, no search, so held-out stays honest.
     # Batches of 8 as 4 x 2, in bf16 on a GPU only. 2 x 4 ran out of memory on a 16 GB card once each prompt had
     # two tasks, and a GPU that runs out of memory spills to system RAM and crawls.
@@ -396,9 +407,14 @@ with ThreadPoolExecutor(4) as pool, LABELS.open("a") as f:
 rows = [{**r, **{k: labels[r["text"]][k] for k in ("effort", "model")}} for r in rows if labels.get(r["text"], {}).get("v") == LABELLER or (BENCH and "model" in labels.get(r["text"], {}))]
 if len(rows) < 100:
     sys.exit(f"only {len(rows)} labelled prompts; tuning needs at least 100")
+# The model is picked on a session's first prompt and kept for all of it, so it has to serve the session's hardest
+# prompt: one that opens on a typo fix and turns into design work needed Opus from the start.
+# ponytail: any Opus prompt makes the session Opus; a share threshold if that sends long, mostly routine sessions there.
+opus = {r["session"] for r in rows if r["model"] == "opus"}
+rows = [{**r, "model": "opus" if r["session"] in opus else "sonnet"} for r in rows]
 held = lambda r: int(hashlib.sha1(r["session"].encode()).hexdigest(), 16) % 10 < 3  # whole sessions, so no leaks
 fit, test = [r for r in rows if not held(r)], [r for r in rows if held(r)]
-print(f"labels: {dict(Counter(r['effort'] for r in rows))}, {dict(Counter(r['model'] for r in rows))}")
+print(f"labels: {dict(Counter(r['effort'] for r in rows))}, sessions {dict(Counter(r['model'] for r in rows if r['first']))}")
 print(f"training on {len(fit)} prompts, holding out {len(test)} from other sessions")
 
 run = WORK / "run"
@@ -442,8 +458,9 @@ if BENCH:
     for n, js in answered.items():
         cols |= {f"{n} ({k})": [j[k] for j in js] for k in ("choice", "score", "router")}
 cols[f"always {common}"] = [common] * len(test)
-likely = Counter(r["model"] for r in fit).most_common(1)[0][0]
+likely = Counter(r["model"] for r in fit if r["first"]).most_common(1)[0][0]
 picks[f"always {likely}"] = [likely] * len(test)
+opens = [i for i, r in enumerate(test) if r["first"]]  # the model is only ever picked on these
 
 off = {n: sum(abs(LEVELS.index(r["effort"]) - LEVELS.index(e)) for r, e in zip(test, c)) / len(test)
        for n, c in cols.items()}
@@ -451,8 +468,8 @@ print(f"\nheld out ({len(test)} prompts)   matches label   mean levels off")
 for n, c in cols.items():
     print(f"  {n:<18} {sum(r['effort'] == e for r, e in zip(test, c)) / len(test):>13.0%} {off[n]:>17.2f}")
 
-hit = {n: sum(r["model"] == m for r, m in zip(test, c)) / len(test) for n, c in picks.items()}
-print(f"\nheld out model ({dict(Counter(r['model'] for r in test))})   matches label")
+hit = {n: sum(test[i]["model"] == c[i] for i in opens) / max(len(opens), 1) for n, c in picks.items()}
+print(f"\nheld out model, {len(opens)} sessions ({dict(Counter(test[i]['model'] for i in opens))})   matches label")
 for n, h in hit.items():
     print(f"  {n:<18} {h:>13.0%}")
 

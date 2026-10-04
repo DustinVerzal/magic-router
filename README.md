@@ -183,10 +183,10 @@ The host needs key-based ssh and rsync. If it's down when a session starts, the 
 
 `just tune` trains the classifier on how you actually work. It's opt-in and needs a checkout. Labelling runs through `claude -p`, so it counts against your Claude subscription's usage, or bills your API key if that's how you're signed in. Run `just benchmarks` first: the labeller uses its scores.
 
-1. **Collect.** It reads every prompt you've sent Claude Code or Codex, from `~/.claude/projects`, `~/.claude/history.jsonl` and `~/.codex`. Slash commands, `$skills` and short follow-ups are skipped, because the router never classifies them, and so are subagents, `codex exec` runs and orchestrators. `just tune 500` uses only your newest 500.
+1. **Collect.** It reads every prompt you've sent Claude Code or Codex, from `~/.claude/projects`, `~/.claude/history.jsonl` and `~/.codex`. Slash commands, `$skills` and short follow-ups are skipped, because the router never classifies them, and so are subagents, `codex exec` runs and orchestrators. A session's first prompt is kept however short, because it picks the model. `just tune 500` uses only your newest 500.
 2. **Label.** Opus 5.5 at xhigh decides which model and effort each prompt needed, given both models' Artificial Analysis scores and response times at every effort, and is asked for the best answer without overthinking, not the cheapest.
-3. **Train.** It trains a LoRA adapter on 70% of your sessions, on CPU, or on `TUNE_HOST` if set.
-4. **Gate.** On the other 30%, the adapter must beat both the score and any adapter already installed on effort, and pick the model no worse than the score. Only then does it install to `~/.cache/magic-router/tuned` and restart the daemon; otherwise nothing changes.
+3. **Train.** It trains a LoRA adapter on 70% of your sessions, on CPU, or on `TUNE_HOST` if set. Sessions are split whole, so related prompts never land on both sides. Effort is learned from every prompt. The model is learned only from each session's first prompt, labelled with what the whole session needed: a session that opens with a typo fix and turns into design work counts as Opus, because the model picked on that first prompt has to last the session.
+4. **Gate.** On the other 30%, the adapter must beat both the score and any adapter already installed on effort, and pick the model no worse than the score on those sessions' first prompts. Only then does it install to `~/.cache/magic-router/tuned` and restart the daemon; otherwise nothing changes.
 
 Results from the author's history (3,344 prompts over six months), scored on 972 held-out prompts:
 
