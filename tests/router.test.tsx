@@ -101,6 +101,20 @@ test("a tuned daemon's model answer picks the session's model on the first promp
   expect(sent.at(-1)?.model).toBe('claude-opus-5-5') // picked once
 })
 
+test('a variant of the routed model keeps its variant', async ($: any, on) => {
+  const { sent } = engine(on, {}, { a1: FIX.scheduler.text, a2: FIX.typo.text })
+  const wide = { ...SESSION, model: 'claude-opus-5-5[1m]' }
+
+  await submit($, FIX.jwt.text)
+  await step($, wide)
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5[1m]', effort: 'high' })
+
+  await step($, { ...wide, agentId: 'a1' })
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5[1m]', effort: 'max' })
+  await step($, { ...wide, agentId: 'a2' })
+  expect(sent.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'low' }) // another model: no variant to keep
+})
+
 test('a subagent is routed once, from its own task, where it inherits the session', async ($: any, on) => {
   const { sent } = engine(on, {}, { a1: FIX.scheduler.text, a2: FIX.jwt.text, fork: FIX.typo.text })
 
