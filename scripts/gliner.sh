@@ -55,7 +55,7 @@ start() {
 # Run this script's command on $HOST, from a copy of this checkout, with your tuned adapter (or none) copied there.
 on_host() {
   ssh "$HOST" 'mkdir -p .cache/magic-router/repo'
-  rsync -a --delete --exclude .git "$ROOT/" "$HOST:.cache/magic-router/repo/"
+  rsync -a --delete --exclude .git --exclude .env --exclude .claude "$ROOT/" "$HOST:.cache/magic-router/repo/"
   if [ -d "$HOME/.cache/magic-router/tuned" ]; then
     rsync -a --delete "$HOME/.cache/magic-router/tuned/" "$HOST:.cache/magic-router/tuned/"
   else
