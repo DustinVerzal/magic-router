@@ -187,3 +187,22 @@ test('the band shows the route and nothing about the classification', async ($: 
   await ui.press({ key: 'hide' })
   expect(await ui.find({ text: /opus 5\.5/ })).toBeUndefined()
 })
+
+test('model: keep routes effort only, for the session and its subagents', { options: { model: 'keep' } }, async ($: any, on) => {
+  const { sent } = engine(on, { pick: { sonnet: 0.9, opus: 0.1 } }, { a1: FIX.typo.text })
+
+  await submit($, FIX.typo.text) // routing would pick Sonnet here
+  await step($)
+  expect(sent.at(-1)).toEqual({ model: SESSION.model, effort: 'low' })
+
+  await submit($, FIX.scheduler.text)
+  await step($)
+  expect(sent.at(-1)).toEqual({ model: SESSION.model, effort: 'max' })
+
+  await step($, { ...SESSION, agentId: 'a1' })
+  expect(sent.at(-1)).toEqual({ model: SESSION.model, effort: 'low' })
+
+  const ui = await $.ui.mount({ plugin: 'magic-router', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 6 } })
+  expect(await ui.find({ text: /session model/ })).toBeDefined()
+  await ui.unmount()
+})
