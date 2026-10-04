@@ -27,6 +27,9 @@ const top = <T extends string = Effort>(p: Probs) => Object.keys(p).reduce((a, b
 // ponytail: theme keys, so the colours follow light and dark themes; low and medium share green
 const HEAT: Record<Effort, string> = { low: 'success', medium: 'success', high: 'warning', xhigh: 'error', max: 'error' }
 const pct = (p: number) => `${Math.round(p * 100)}%`
+// The routed model, unless the asked one is a variant of it ('claude-opus-5-5[1m]', the 1M-context window):
+// the bare id would quietly drop the variant.
+const onto = (asked: string, routed: string | null) => (routed === null || asked.replace(/\[.*\]$/, '') === routed ? asked : routed)
 const short = (model: string) => model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2')
 
 // undefined when the daemon is down or refuses.
@@ -139,7 +142,7 @@ export const register: Register = on => {
       // What the subagent inherited from the session follows its route; what its caller or definition pinned stays.
       return yield* next({
         ...e,
-        model: e.model === was.model && mine.model !== null ? mine.model : e.model,
+        model: e.model === was.model ? onto(e.model, mine.model) : e.model,
         effort: (e.effort ?? null) === was.effort ? mine.effort : e.effort,
       })
     }
@@ -151,7 +154,7 @@ export const register: Register = on => {
       if ((await read($, note)) === null) await update($, note, () => `stood aside: ${asked.model} chosen by hand`)
       return yield* next(e)
     }
-    return yield* next({ ...e, model: r.model ?? e.model, effort: r.effort })
+    return yield* next({ ...e, model: onto(e.model, r.model), effort: r.effort })
   })
 
   on('turn.complete', async ($, e, next) => {
