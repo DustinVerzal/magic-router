@@ -180,7 +180,7 @@ The host needs key-based ssh and rsync. If it's down when a session starts, the 
 
 ## Tune it to your prompts
 
-`just tune` trains the classifier on how you actually work. It's opt-in, costs money (Claude labels your prompts), and needs a checkout. Run `just benchmarks` first: the labeller uses its scores.
+`just tune` trains the classifier on how you actually work. It's opt-in and needs a checkout. Labelling runs through `claude -p`, so it counts against your Claude subscription's usage, or bills your API key if that's how you're signed in. Run `just benchmarks` first: the labeller uses its scores.
 
 1. **Collect.** It reads every prompt you've sent Claude Code or Codex, from `~/.claude/projects`, `~/.claude/history.jsonl` and `~/.codex`. Slash commands, `$skills` and short follow-ups are skipped, because the router never classifies them, and so are subagents, `codex exec` runs and orchestrators. `just tune 500` uses only your newest 500.
 2. **Label.** Opus 5.5 at xhigh decides which model and effort each prompt needed, given both models' Artificial Analysis scores and response times at every effort, and is asked for the best answer without overthinking, not the cheapest.
