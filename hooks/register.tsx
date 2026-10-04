@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Effort, Probs, Route } from '../types'
-import { EFFORTS, SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
+import { EFFORTS, MODELS, PICKS, SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
 
 const DAEMON = 'http://127.0.0.1:8765' // ponytail: fixed port, matches ROUTER_PORT's default in server/classifier.py
 
@@ -16,11 +16,11 @@ const isHidden = atom({ plugin: 'model-router', key: 'isHidden' } as const, fals
 // What a person sent; task notifications, peers and plugins keep the current route.
 const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
 
-// effort comes back only from a daemon with a tuned adapter (scripts/tune.py).
-type Classified = { choose: Probs; flags: Probs; effort?: Probs; ms: number }
+// effort and pick come back only from a daemon with a tuned adapter (scripts/tune.py).
+type Classified = { choose: Probs; flags: Probs; effort?: Probs; pick?: Probs; ms: number }
 
 const LADDER = EFFORTS.map(([, e]) => e).reverse()
-const top = (p: Probs) => Object.keys(p).reduce((a, b) => (p[b] > p[a] ? b : a)) as Effort
+const top = <T extends string = Effort>(p: Probs) => Object.keys(p).reduce((a, b) => (p[b] > p[a] ? b : a)) as T
 // ponytail: theme keys, so the colours follow light and dark themes; low and medium share green
 const HEAT: Record<Effort, string> = { low: 'success', medium: 'success', high: 'warning', xhigh: 'error', max: 'error' }
 const pct = (p: number) => `${Math.round(p * 100)}%`
@@ -61,7 +61,7 @@ export const register: Register = on => {
       .fetch(`${DAEMON}/classify`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS, effort: LADDER }),
+        body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS, effort: LADDER, pick: PICKS }),
       })
       .then(
         r => (r.ok ? JSON.parse(r.text) : undefined),
@@ -78,8 +78,10 @@ export const register: Register = on => {
 
     const s = score(found.choose, found.flags)
     const last = await read($, route)
+    // Fable's score threshold outranks the adapter, which only chooses between Sonnet and Opus.
+    const byScore = modelFor(s)
     const chosen: Route = {
-      model: picked ? (last?.model ?? null) : modelFor(s),
+      model: picked ? (last?.model ?? null) : found.pick && byScore !== MODELS.fable ? MODELS[top<(typeof PICKS)[number]>(found.pick)] : byScore,
       // An adapter tuned on your own prompts beat the score on held-out ones before it was installed.
       effort: found.effort ? top(found.effort) : effortFor(s),
       score: s,
