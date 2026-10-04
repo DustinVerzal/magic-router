@@ -30,7 +30,8 @@ A typo fix doesn't need Opus at `xhigh`, and a distributed-systems design should
 - **Effort is picked on every prompt.** Short follow-ups ("yes", "go ahead") keep the last effort.
 - **It runs on your machine.** About 0.3 s of CPU per prompt, and no prompt goes to a third party to be routed.
 - **You can see every decision.** A band above the prompt shows the model, the effort, how long classifying took, and last turn's cache-read %.
-- **It gets out of your way** for subagents, and for the rest of the session once you pick a model or effort by hand ([details](#when-it-stands-aside)).
+- **It routes subagents too.** Each subagent gets its own model and effort from the task it was given. A model the caller or the agent's definition named is kept.
+- **It gets out of your way** for the rest of the session once you pick a model or effort by hand ([details](#when-it-stands-aside)).
 - **It learns how you work.** Optionally, [train it on your own prompt history](#tune-it-to-your-prompts): on held-out prompts, a tuned adapter matched the labelled effort 66% of the time, against 40% for the default score.
 
 ## Install
@@ -122,7 +123,7 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 
 ### When it stands aside
 
-- **Subagents**: their requests keep their own model and effort.
+- **Subagents**: each one is classified once, on its first request, and keeps that route. Only what it would inherit from the session is rewritten: a model or effort set by the Agent call or the agent's definition is kept. Forks are left alone, because they share their parent's context and prompt cache.
 - **`/model`, `/effort`, or a fallback**: if any of these changes what the engine asks for, the router stops rewriting for the rest of the session.
 - **Classifier unreachable on the first prompt**: the session keeps its own model, and effort routing starts once the daemon answers.
 - **`/clear`**: the next prompt picks a model again.

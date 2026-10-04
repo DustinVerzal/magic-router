@@ -28,7 +28,7 @@ Don't run `just tune`, `just bench` or `just benchmarks` unless asked: they cost
 - `scripts/benchmarks.py` (no args) rewrites the `TASK_BIAS` block, from its `// Where Opus` comment to the closing `}`. Hand edits there get overwritten; change the script instead.
 - The port is `ROUTER_PORT` (default 8765), read by `daemon()` in `hooks/register.tsx`, `PORT` in `scripts/gliner.sh` and `server/classifier.py`. Keep the three defaults in step.
 - The model is picked once per session on purpose: switching mid-conversation forfeits the prompt cache. Don't make the model re-route per prompt.
-- `turn.step` must leave subagent requests (`e.agentId !== undefined`) untouched, and must stand aside once `/model` or `/effort` changes the baseline. Tests cover both; keep them passing.
+- `turn.step` routes a subagent (`e.agentId !== undefined`) once, from its task, and rewrites only what it inherited (a value equal to the main loop's `baseline`). Forks (first request carries more than one message) stay untouched, and everything stands aside once `/model` or `/effort` changes the baseline. Tests cover these; keep them passing.
 - `tests/router.test.tsx` fixtures (`FIX`) are recorded daemon outputs. If you change weights or thresholds, update the expected routes in the first test deliberately, not by copying whatever the new code returns.
 - The daemon is shared across sessions and outlives them. After editing `server/classifier.py`, restart it (`scripts/gliner.sh stop && scripts/gliner.sh start`) before trusting live behaviour.
 

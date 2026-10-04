@@ -28,6 +28,8 @@ declare module 'claude-code' {
       note: string | null
       cache: Cache | null
       isHidden: boolean
+      /** Each subagent's route by agent id, picked on its first request; null leaves it alone. */
+      agents: Record<string, Route | null>
     }
   }
 }

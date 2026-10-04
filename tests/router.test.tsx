@@ -13,11 +13,16 @@ const FIX = {
 
 const SESSION = { model: 'claude-opus-5-5', effort: 'medium' } as const
 
-// The engine beneath the plugin: a daemon answering from FIX plus `extra` (or down), and a model that records each request.
-function engine(on: On, extra: object = {}) {
+// The engine beneath the plugin: a daemon answering from FIX plus `extra` (or down), subagents given `tasks`
+// by id, and a model that records each request.
+function engine(on: On, extra: object = {}, tasks: Record<string, string> = {}) {
   const daemon = { isUp: true }
   const sent: { model: string; effort: unknown }[] = []
   on('env.get', () => ({ value: undefined })) // no ROUTER_PORT: the default port
+  on('session.messages', ($, e) => {
+    const task = 'agentId' in e && e.agentId !== undefined ? tasks[e.agentId] : undefined
+    return { value: task === undefined ? { deny: 'no such agent' } : [{ role: 'user' as const, text: task, toolUses: [] }] }
+  })
   on('http.fetch', ($, e) => {
     if (!daemon.isUp) return { deny: 'ECONNREFUSED' }
     if (e.url.endsWith('/health')) return { value: { status: 200, ok: true, headers: {}, text: '{"ready": true}' } }
@@ -39,7 +44,7 @@ function engine(on: On, extra: object = {}) {
 
 const submit = ($: any, text: string) => $.prompt.submit({ text, wait: false, origin: { kind: 'composer' } })
 
-async function step($: any, asked: { model: string; effort: string; agentId?: string } = SESSION) {
+async function step($: any, asked: { model: string; effort: string; agentId?: string; messageCount?: number } = SESSION) {
   const stream = $.turn.step({ turnId: 't', index: 0, messageCount: 1, ...asked })
   for await (const _ of stream);
   return stream.result
@@ -96,6 +101,28 @@ test("a tuned daemon's model answer picks the session's model on the first promp
   expect(sent.at(-1)?.model).toBe('claude-opus-5-5') // picked once
 })
 
+test('a subagent is routed once, from its own task, where it inherits the session', async ($: any, on) => {
+  const { sent } = engine(on, {}, { a1: FIX.scheduler.text, a2: FIX.jwt.text, fork: FIX.typo.text })
+
+  await submit($, FIX.typo.text)
+  await step($)
+  expect(sent.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'low' })
+
+  await step($, { ...SESSION, agentId: 'a1' })
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'max' })
+  await step($, { ...SESSION, agentId: 'a1', messageCount: 3 })
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'max' }) // picked on its first request
+
+  await step($, { model: 'claude-haiku-4-5-20251001', effort: 'medium', agentId: 'a2' })
+  expect(sent.at(-1)).toEqual({ model: 'claude-haiku-4-5-20251001', effort: 'high' }) // a pinned model stays
+
+  await step($, { ...SESSION, agentId: 'fork', messageCount: 12 })
+  expect(sent.at(-1)).toEqual(SESSION) // a fork carries its parent's context, and its cache
+
+  await step($, { ...SESSION, agentId: 'unknown' })
+  expect(sent.at(-1)).toEqual(SESSION)
+})
+
 test('a classifier down on the first prompt keeps the session model for good', async ($: any, on) => {
   const { daemon, sent } = engine(on)
 
@@ -111,7 +138,7 @@ test('a classifier down on the first prompt keeps the session model for good', a
 })
 
 test('a model chosen by hand stands the router aside', async ($: any, on) => {
-  const { sent } = engine(on)
+  const { sent } = engine(on, {}, { a1: FIX.typo.text })
 
   await submit($, FIX.typo.text)
   await step($)
@@ -119,6 +146,9 @@ test('a model chosen by hand stands the router aside', async ($: any, on) => {
 
   await step($, { model: 'claude-fable-5-1', effort: 'high' })
   expect(sent.at(-1)).toEqual({ model: 'claude-fable-5-1', effort: 'high' })
+
+  await step($, { ...SESSION, effort: 'max', agentId: 'a1' }) // /effort alone: the model it inherits is unchanged
+  expect(sent.at(-1)).toEqual({ ...SESSION, effort: 'max' }) // its subagents stand aside too
 })
 
 test('the band shows the route and nothing about the classification', async ($: any, on) => {

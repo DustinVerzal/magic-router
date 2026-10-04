@@ -1,11 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface as $, Register } from 'claude-code'
 
 import type { Effort, Probs, Route } from '../types'
 import { EFFORTS, MODELS, PICKS, SIGNALS, TASKS, effortFor, isFollowUp, modelFor, score } from './route'
 
 // The daemon's URL: ROUTER_PORT, as server/classifier.py and scripts/gliner.sh read it.
-const daemon = async ($: { env: { get(k: string): Promise<string | undefined> } }) =>
+const daemon = async ($: $) =>
   `http://127.0.0.1:${(await $.env.get('ROUTER_PORT')) || '8765'}`
 
 const isPicked = atom({ plugin: 'magic-router', key: 'isPicked' } as const, false)
@@ -14,6 +14,7 @@ const baseline = atom({ plugin: 'magic-router', key: 'baseline' } as const, null
 const note = atom({ plugin: 'magic-router', key: 'note' } as const, null)
 const cache = atom({ plugin: 'magic-router', key: 'cache' } as const, null)
 const isHidden = atom({ plugin: 'magic-router', key: 'isHidden' } as const, false)
+const agents = atom({ plugin: 'magic-router', key: 'agents' } as const, {})
 
 // What a person sent; task notifications, peers and plugins keep the current route.
 const ROUTED_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
@@ -27,6 +28,46 @@ const top = <T extends string = Effort>(p: Probs) => Object.keys(p).reduce((a, b
 const HEAT: Record<Effort, string> = { low: 'success', medium: 'success', high: 'warning', xhigh: 'error', max: 'error' }
 const pct = (p: number) => `${Math.round(p * 100)}%`
 const short = (model: string) => model.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2')
+
+// undefined when the daemon is down or refuses.
+const classify = async ($: $, text: string): Promise<Classified | undefined> =>
+  $.http
+    .fetch(`${await daemon($)}/classify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, 2000), choose: TASKS, flags: SIGNALS, effort: LADDER, pick: PICKS }),
+    })
+    .then(
+      r => (r.ok ? JSON.parse(r.text) : undefined),
+      () => undefined,
+    )
+
+// `model` given keeps that model (a session's already picked); left out, the classification picks one.
+const routeFor = (found: Classified, model?: string | null): Route => {
+  const s = score(found.choose, found.flags)
+  // Fable's score threshold outranks the adapter, which only chooses between Sonnet and Opus.
+  const byScore = modelFor(s)
+  return {
+    model: model !== undefined ? model : found.pick && byScore !== MODELS.fable ? MODELS[top<(typeof PICKS)[number]>(found.pick)] : byScore,
+    // An adapter tuned on your own prompts beat the score on held-out ones before it was installed.
+    effort: found.effort ? top(found.effort) : effortFor(s),
+    score: s,
+    task: found.choose,
+    signals: found.flags,
+    ms: found.ms,
+  }
+}
+
+// A subagent's conversation is its own, so it can take a model of its own at no cost to the main loop's cache;
+// it is routed once, on its first request, from the task it was given. One whose first request carries more
+// than that task (a fork, which shares its parent's context and cache) is left alone, as is a missed classification.
+const routeAgent = async ($: $, agentId: string, messageCount: number) => {
+  if (messageCount !== 1) return null
+  const messages = await $.session.messages({ agentId })
+  const task = Array.isArray(messages) ? messages.find(m => m.role === 'user')?.text : undefined
+  const found = task ? await classify($, task) : undefined
+  return found === undefined ? null : routeFor(found)
+}
 
 export const register: Register = on => {
   // Start the shared daemon if no session has: it outlives this one, so only the first session after a
@@ -61,39 +102,19 @@ export const register: Register = on => {
     const picked = await read($, isPicked)
     if (picked && isFollowUp(e.text)) return next(e)
 
-    const url = await daemon($)
-    const found: Classified | undefined = await $.http
-      .fetch(`${url}/classify`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: e.text.slice(0, 2000), choose: TASKS, flags: SIGNALS, effort: LADDER, pick: PICKS }),
-      })
-      .then(
-        r => (r.ok ? JSON.parse(r.text) : undefined),
-        () => undefined,
-      )
+    const found = await classify($, e.text)
 
     if (found === undefined) {
       // A first prompt the classifier missed still settles the model (the session's own): picking one
       // later would switch models mid-conversation.
       await update($, isPicked, () => true)
+      const url = await daemon($)
       await update($, note, () => `classifier unreachable at ${url}; see ~/.cache/magic-router/classifier.log`)
       return next(e)
     }
 
-    const s = score(found.choose, found.flags)
     const last = await read($, route)
-    // Fable's score threshold outranks the adapter, which only chooses between Sonnet and Opus.
-    const byScore = modelFor(s)
-    const chosen: Route = {
-      model: picked ? (last?.model ?? null) : found.pick && byScore !== MODELS.fable ? MODELS[top<(typeof PICKS)[number]>(found.pick)] : byScore,
-      // An adapter tuned on your own prompts beat the score on held-out ones before it was installed.
-      effort: found.effort ? top(found.effort) : effortFor(s),
-      score: s,
-      task: found.choose,
-      signals: found.flags,
-      ms: found.ms,
-    }
+    const chosen = routeFor(found, picked ? (last?.model ?? null) : undefined)
     await update($, isPicked, () => true)
     await update($, route, () => chosen)
     await update($, isHidden, () => false)
@@ -101,12 +122,27 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The main loop's requests only: subagents keep the model and effort they were given.
   on('turn.step', async function* ($, e, next) {
     const r = await read($, route)
-    if (e.agentId !== undefined || r === null) return yield* next(e)
+    if (r === null) return yield* next(e)
 
     const was = await read($, baseline)
+    if (e.agentId !== undefined) {
+      if (was === null || (await read($, note))?.startsWith('stood aside')) return yield* next(e)
+      const id = e.agentId
+      let mine = (await read($, agents))[id]
+      if (mine === undefined) {
+        mine = await routeAgent($, id, e.messageCount)
+        await update($, agents, a => ({ ...a, [id]: mine! }))
+      }
+      if (mine === null) return yield* next(e)
+      // What the subagent inherited from the session follows its route; what its caller or definition pinned stays.
+      return yield* next({
+        ...e,
+        model: e.model === was.model && mine.model !== null ? mine.model : e.model,
+        effort: (e.effort ?? null) === was.effort ? mine.effort : e.effort,
+      })
+    }
     const asked = { model: e.model, effort: e.effort ?? null }
     if (was === null) {
       await update($, baseline, () => asked)
@@ -138,6 +174,7 @@ export const register: Register = on => {
       await update($, baseline, () => null)
       await update($, note, () => null)
       await update($, cache, () => null)
+      await update($, agents, () => ({}))
     }
     return next(e)
   })
