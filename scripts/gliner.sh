@@ -18,7 +18,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 SERVER="$ROOT/server/classifier.py"
 PORT=${ROUTER_PORT:-8765} # the same variable the daemon and the mod read
 URL=http://127.0.0.1:$PORT
-export ROUTER_PORT=$PORT
+export ROUTER_PORT="$PORT"
 LOG="$HOME/.cache/magic-router/classifier.log"
 WAIT=${ROUTER_WAIT:-900} # seconds; the first run downloads ~1.7 GB of torch and weights
 
