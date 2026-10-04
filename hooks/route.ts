@@ -85,4 +85,7 @@ export const effortFor = (s: number): Effort => EFFORTS.find(([min]) => s >= min
 
 export const modelFor = (s: number): string => (s >= FABLE_AT ? MODELS.fable : s >= OPUS_AT ? MODELS.opus : MODELS.sonnet)
 
+// What a tuned adapter chooses between (scripts/tune.py); a score at FABLE_AT still goes to Fable.
+export const PICKS = ['sonnet', 'opus'] as const
+
 export const isFollowUp = (text: string) => text.trim().split(/\s+/).length < FOLLOW_UP_WORDS

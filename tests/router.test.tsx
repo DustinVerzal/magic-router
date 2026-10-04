@@ -75,12 +75,24 @@ test('the first prompt picks the model for the session; every prompt picks its e
   expect(sent.at(-1)).toEqual(SESSION)
 })
 
-test("a tuned daemon's effort answer wins over the score; the score still picks the model", async ($: any, on) => {
+test("a tuned daemon's effort answer wins over the score; without a model answer the score picks the model", async ($: any, on) => {
   const { sent } = engine(on, { effort: { low: 0.1, medium: 0.15, high: 0.6, xhigh: 0.1, max: 0.05 } })
 
   await submit($, FIX.typo.text)
   await step($)
   expect(sent.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
+})
+
+test("a tuned daemon's model answer picks the session's model on the first prompt only", async ($: any, on) => {
+  const { sent } = engine(on, { effort: { low: 0.1, medium: 0.1, high: 0.1, xhigh: 0.6, max: 0.1 }, pick: { sonnet: 0.2, opus: 0.8 } })
+
+  await submit($, FIX.typo.text) // the score says Sonnet
+  await step($)
+  expect(sent.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'xhigh' })
+
+  await submit($, FIX.push.text)
+  await step($)
+  expect(sent.at(-1)?.model).toBe('claude-opus-5-5') // picked once
 })
 
 test('a classifier down on the first prompt keeps the session model for good', async ($: any, on) => {
