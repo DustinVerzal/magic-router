@@ -9,9 +9,9 @@ benchmarks *models:
 tune *limit:
     uv run --script scripts/tune.py {{limit}}
 
-# Benchmark the adapter from `just tune` against hosted decision models on the held-out prompts, without retraining. OPENROUTER_KEY adds Jev, FASTINO_API_KEY adds GLiDE; each gets those prompts.
-bench:
-    uv run --script scripts/tune.py --bench
+# Benchmark the adapter from `just tune` against other decision models on the held-out prompts, without retraining. OPENROUTER_KEY adds Jev, FASTINO_API_KEY adds GLiDE (each gets those prompts); `just bench clef` adds Clef-flash on your GPU (TUNE_HOST's, if set).
+bench *models:
+    uv run --script scripts/tune.py --bench {{models}}
 
 # Routing tests.
 test:

@@ -7,7 +7,7 @@ A Claude Code plugin (`magic-router`) that picks Sonnet or Opus per session and 
 - `hooks/route.ts`: all routing policy (labels, weights, thresholds). Pure functions, no I/O.
 - `hooks/register.tsx`: the plugin's hooks (daemon start, prompt classification, request rewrite, the band UI). State lives in atoms typed in `types/index.d.ts`.
 - `server/classifier.py`: the daemon (uv inline-script deps, stdlib HTTP server on `127.0.0.1:8765`). It only answers questions; it holds no policy.
-- `scripts/gliner.sh` manages the daemon; `scripts/tune.py` trains a LoRA effort adapter; `scripts/benchmarks.py` pulls Artificial Analysis evals.
+- `scripts/gliner.sh` manages the daemon; `scripts/tune.py` trains a LoRA effort adapter; `scripts/benchmarks.py` pulls Artificial Analysis evals. `scripts/clef.py` runs Cloudflare's Clef-flash on the GPU for `just bench clef`; it has its own uv environment, since gliner2 pins `transformers<5`.
 
 ## Commands
 

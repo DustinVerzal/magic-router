@@ -26,12 +26,14 @@
    installs it to ~/.cache/magic-router/tuned and restarts the daemon, which then answers both from it. To undo:
    delete that directory and run `scripts/gliner.sh stop`.
 
-    uv run --script scripts/tune.py --bench                                              (or: just bench)
+    uv run --script scripts/tune.py --bench [clef]                                       (or: just bench [clef])
 
-Benchmark: skips labelling and training and compares the adapter that is already trained (or installed) with hosted
-decision models on the same held-out prompts: Jev (TypeSafe, through OpenRouter) with OPENROUTER_KEY, GLiDE (Fastino)
-with FASTINO_API_KEY. The first 2000 characters of each held-out prompt (about 30% of them) go to each provider you
-give a key for; Jev costs $0.042 per million tokens, so cents.
+Benchmark: skips labelling and training and compares the adapter that is already trained (or installed) with other
+decision models on the same held-out prompts, on effort and on the model: Jev (TypeSafe, through OpenRouter) with
+OPENROUTER_KEY, GLiDE (Fastino) with FASTINO_API_KEY, and with `clef`, Clef-flash (Cloudflare's 9B, open weights) on
+the GPU, through scripts/clef.py, on TUNE_HOST if you set one. The first 2000 characters of each held-out prompt (about
+30% of them) go to each provider you give a key for; Jev costs $0.042 per million tokens, so cents. Clef reads whole
+prompts (up to about 32,000 characters) and keeps them on your machines.
 """
 import ast
 import hashlib
@@ -59,6 +61,7 @@ LEVELS = ["low", "medium", "high", "xhigh", "max"]
 LIMIT = int(sys.argv[1]) if sys.argv[1:2] and sys.argv[1].isdigit() else None
 HOST = os.environ.get("TUNE_HOST")
 BENCH = "--bench" in sys.argv
+CLEF = BENCH and "clef" in sys.argv  # tune.py --bench clef: Clef-flash on the GPU (TUNE_HOST's, if set) too
 BATCH = 25
 sys.stdout.reconfigure(line_buffering=True)  # progress shows up when piped to a log, too
 
@@ -283,23 +286,36 @@ DECIDERS = {  # hosted decision models that take the same questions: name -> (ur
     "glide": ("https://api.fastino.ai/v1/systemone", "fastino/GLiDE", "FASTINO_API_KEY", lambda key: {"X-API-Key": key}),
 }
 DEFS = dict(re.findall(rf"^({'|'.join(LEVELS)}): (.+)$", SYSTEM, re.M))  # the labeller's definition of each level
+ASK = ("What effort should an AI coding agent answer this developer prompt at? Higher effort is slower and "
+       "costs more, so pick the lowest level at which a strong model reliably does the job well.")
+# What a decision model is asked of each prompt: the effort as a choice and as a score, the router's own task and
+# signal questions (put through its weights), and the model, as the labeller was asked it.
+QUESTIONS = {
+    "choice": {"type": "choice", "instructions": ASK, "criteria": DEFS},
+    "score": {"type": "score", "instructions": ASK, "criteria": [DEFS[level] for level in LEVELS]},
+    "task": {"type": "choice", "instructions": "What kind of work does this prompt ask an AI coding agent for?",
+             "criteria": TASKS},
+    **{k: {"type": "noul", "instructions": f"Is this true of the prompt: {d}?"} for k, d in SIGNALS.items()},
+    "model": {"type": "choice", "criteria": {
+        "sonnet": "Claude Sonnet: faster, and level with Opus on routine edits, tool use, questions and write-ups",
+        "opus": "Claude Opus: slower, and ahead on hard reasoning, agentic coding, and work that rests on judgment or design"},
+        "instructions": "Which model should an AI coding session that opens with this prompt run on? It keeps that "
+                        "model for every later prompt, so pick the best expected answers without waits they do not need."},
+}
+
+
+def decision(a, ms, cost=0):
+    """A decision model's answers to QUESTIONS, as the effort three ways and the model."""
+    found = {"choose": {k: a["task"]["probabilities"].get(k, 0) for k in TASKS}, "flags": {k: a[k]["noul"] for k in SIGNALS}}
+    return {"choice": a["choice"]["choice"], "score": LEVELS[round(sum(int(k) * p for k, p in a["score"]["probabilities"].items()))],
+            "router": current(found)[0], "model": a["model"]["choice"], "ms": ms, "cost": cost}
 
 
 def decide(name, text):
-    """A hosted decision model's answers on one prompt, in one call (the questions run in parallel and in isolation):
-    the effort asked as a choice and as a score, and the router's own task and signal questions put through its weights."""
+    """A hosted decision model's answers on one prompt, in one call (the questions run in parallel and in isolation)."""
     url, model, env, headers = DECIDERS[name]
-    ask = ("What effort should an AI coding agent answer this developer prompt at? Higher effort is slower and "
-           "costs more, so pick the lowest level at which a strong model reliably does the job well.")
-    questions = {
-        "choice": {"type": "choice", "instructions": ask, "criteria": DEFS},
-        "score": {"type": "score", "instructions": ask, "criteria": [DEFS[level] for level in LEVELS]},
-        "task": {"type": "choice", "instructions": "What kind of work does this prompt ask an AI coding agent for?",
-                 "criteria": TASKS},
-        **{k: {"type": "noul", "instructions": f"Is this true of the prompt: {d}?"} for k, d in SIGNALS.items()},
-    }
     req = urllib.request.Request(
-        url, json.dumps({"model": model, "state": text[:2000], "questions": questions}).encode(),
+        url, json.dumps({"model": model, "state": text[:2000], "questions": QUESTIONS}).encode(),
         {"Content-Type": "application/json", **headers(os.environ[env])})
     for tries in (1, 2, 3):
         try:
@@ -311,10 +327,28 @@ def decide(name, text):
             if tries == 3:
                 raise
             time.sleep(tries * 2)
-    a = out["answers"]
-    found = {"choose": {k: a["task"]["probabilities"].get(k, 0) for k in TASKS}, "flags": {k: a[k]["noul"] for k in SIGNALS}}
-    return {"choice": a["choice"]["choice"], "score": LEVELS[round(sum(int(k) * p for k, p in a["score"]["probabilities"].items()))], "router": current(found)[0],
-            "ms": (time.perf_counter() - t) * 1000, "cost": out["usage"].get("cost", 0)}
+    return decision(out["answers"], (time.perf_counter() - t) * 1000, out["usage"].get("cost", 0))
+
+
+def clef(test):
+    """Clef-flash's answers on the held-out prompts, from scripts/clef.py on this machine's GPU. Its own environment
+    (gliner2 pins an older transformers) and process, so its VRAM is free again before the adapters load. It reads
+    whole prompts, where GLiNER gets 2000 characters (its DeBERTa encoder was trained on 512 tokens): scripts/clef.py
+    cuts each to 8,192 tokens, about 32,000 characters, at up to 2 seconds a prompt."""
+    job, out = WORK / "clef.in.json", WORK / "clef.json"
+    gliner = lambda cmd: subprocess.run([ROOT / "scripts/gliner.sh", cmd], capture_output=True).returncode == 0  # noqa: E731
+    # Clef's 11 GB, a long prompt's activations and the live daemon outgrow a 16 GB card, which then spills to system
+    # RAM and crawls; so the daemon stops for the run (sessions keep their last route meanwhile) and comes back after.
+    # ponytail: a Claude Code session started on this machine mid-run brings the daemon back; hold off until it ends.
+    was_up = gliner("status") and gliner("stop")
+    try:
+        job.write_text(json.dumps({"questions": QUESTIONS, "texts": [r["text"] for r in test]}, ensure_ascii=False))
+        subprocess.run(["uv", "run", "--script", str(ROOT / "scripts/clef.py"), str(job), str(out)], check=True)
+    finally:
+        job.unlink(missing_ok=True)  # the prompts
+        if was_up:
+            gliner("start")
+    return [decision(o["answers"], o["ms"]) for o in json.loads(out.read_text())]
 
 
 def train(rows, out):
@@ -369,20 +403,23 @@ def remote(args, send, fetch=()):
     for name, path in send.items():
         sh("rsync", "-a", "--delete", f"{path}/" if path.is_dir() else str(path), f"{HOST}:{w}/{name}")
     try:
-        sh("ssh", HOST, f"PATH=$HOME/.local/bin:$PATH uv run --script {REMOTE}/scripts/tune.py {args}")
+        sh("ssh", HOST, f"CLEF_BITS={int(os.environ.get('CLEF_BITS', 8))} PATH=$HOME/.local/bin:$PATH "
+                        f"uv run --script {REMOTE}/scripts/tune.py {args}")
         for name in fetch:
             sh("rsync", "-a", "--delete", f"{HOST}:{w}/{name}", f"{WORK}/")
     finally:
-        sh("ssh", HOST, f"rm -f {w}/fit.json {w}/test.json")
+        sh("ssh", HOST, f"rm -f {w}/fit.json {w}/test.json {w}/clef.in.json")
 
 
 if sys.argv[1:2] == ["--train"]:  # on TUNE_HOST, from remote()
     shutil.rmtree(WORK / "run", ignore_errors=True)
     train(json.loads((WORK / "fit.json").read_text()), WORK / "run")
     sys.exit()
-if sys.argv[1:2] == ["--score"]:  # on TUNE_HOST, from remote(): tune.py --score <adapter dirs in WORK>
+if sys.argv[1:2] == ["--score"]:  # on TUNE_HOST, from remote(): tune.py --score <adapter dirs in WORK> [clef]
     test = json.loads((WORK / "test.json").read_text())
-    (WORK / "answers.json").write_text(json.dumps({n: answers(WORK / n, test) for n in sys.argv[2:]}))
+    got = {"clef": clef(test)} if "clef" in sys.argv[2:] else {}  # first, while the GPU is free
+    got |= {n: answers(WORK / n, test) for n in sys.argv[2:] if n != "clef"}
+    (WORK / "answers.json").write_text(json.dumps(got))
     sys.exit()
 
 WORK.mkdir(parents=True, exist_ok=True)
@@ -420,8 +457,9 @@ print(f"training on {len(fit)} prompts, holding out {len(test)} from other sessi
 run = WORK / "run"
 if BENCH:
     asked = [n for n, d in DECIDERS.items() if d[2] in os.environ]
-    if not asked:
-        sys.exit("--bench asks hosted models: set OPENROUTER_KEY for jev, FASTINO_API_KEY for glide, or both")
+    if not asked and not CLEF:
+        sys.exit("--bench compares other decision models: add `clef` for Clef-flash on your GPU, or set "
+                 "OPENROUTER_KEY for jev, FASTINO_API_KEY for glide")
     answered = {}
     for n in asked:  # before the slow local scoring, so a bad key fails fast
         print(f"asking {n} about the {len(test)} held-out prompts")
@@ -449,10 +487,13 @@ if (classifier.TUNED / "adapter_config.json").exists():  # from an earlier run; 
     adapters["installed"] = classifier.TUNED
 if HOST:
     (WORK / "test.json").write_text(json.dumps(test, ensure_ascii=False))
-    remote(f"--score {' '.join(adapters)}", {"test.json": WORK / "test.json", **adapters}, ["answers.json"])
+    remote(f"--score {' '.join(adapters)}{' clef' * CLEF}", {"test.json": WORK / "test.json", **adapters}, ["answers.json"])
     got = json.loads((WORK / "answers.json").read_text())
 else:
-    got = {n: answers(path, test) for n, path in adapters.items()}
+    got = {"clef": clef(test)} if CLEF else {}  # first, while the GPU is free
+    got |= {n: answers(path, test) for n, path in adapters.items()}
+if CLEF:
+    answered["clef"] = got["clef"]
 cols = {"current router": got["tuned"][0], "tuned adapter": got["tuned"][1]}
 picks = {"current router": got["tuned"][2], "tuned adapter": got["tuned"][3]}
 if "installed" in got:
@@ -460,6 +501,7 @@ if "installed" in got:
 if BENCH:
     for n, js in answered.items():
         cols |= {f"{n} ({k})": [j[k] for j in js] for k in ("choice", "score", "router")}
+        picks[n] = [j["model"] for j in js]
 cols[f"always {common}"] = [common] * len(test)
 likely = Counter(r["model"] for r in fit if r["first"]).most_common(1)[0][0]
 picks[f"always {likely}"] = [likely] * len(test)

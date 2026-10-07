@@ -135,7 +135,7 @@ All routing policy lives in [`hooks/route.ts`](hooks/route.ts). The daemon only 
 - **Files stay in `~/.cache/magic-router`**, plus the weights in Hugging Face's cache, downloaded once.
 - **uv comes from Astral's installer** (`curl … | sh`, to `~/.local/bin`, no shell profile edits) if it's missing.
 
-Only the opt-in tools reach further: [`just tune`](#tune-it-to-your-prompts) reads your local transcripts and sends prompts to Claude through `claude -p` (and to your ssh host, if you set one), and [`just bench`](#against-hosted-decision-models) sends prompts to the hosted models whose keys you set.
+Only the opt-in tools reach further: [`just tune`](#tune-it-to-your-prompts) reads your local transcripts and sends prompts to Claude through `claude -p` (and to your ssh host, if you set one), and [`just bench`](#against-other-decision-models) sends prompts to the hosted models whose keys you set.
 
 ## Configuration
 
@@ -149,6 +149,7 @@ Nothing needs configuring. These environment variables change the defaults:
 | `TUNE_HOST` | none | An ssh host with an NVIDIA GPU to [tune](#tune-it-to-your-prompts) on. |
 | `AA_API_KEY` | none | [Artificial Analysis](https://artificialanalysis.ai/api) key for `just benchmarks`. |
 | `OPENROUTER_KEY`, `FASTINO_API_KEY` | none | Hosted-model keys for `just bench`. |
+| `CLEF_BITS` | `8` | Precision for `just bench clef`: `8` (11 GB of VRAM), `4` (8 GB, faster, but its answers drift from 8 bits') or `16` (bf16, about 20 GB). |
 
 To route **effort only** and never change the model, set the plugin's **Model routing** option to `keep` (in `/config`, or `pluginConfigs["magic-router"].options.model` in settings). The session and its subagents stay on whatever model you picked, and the band shows "session model". The default, `route`, lets the first prompt pick.
 
@@ -223,11 +224,11 @@ With an adapter installed, the daemon answers effort and model from it, which ad
 
 </details>
 
-<details id="against-hosted-decision-models">
-<summary><b>Against hosted decision models</b>: <code>just bench</code></summary>
+<details id="against-other-decision-models">
+<summary><b>Against other decision models</b>: <code>just bench</code></summary>
 <br>
 
-`just bench` scores the trained adapter against hosted decision models on the same 972 held-out prompts, without retraining, sending each prompt's first 2,000 characters to the provider. `OPENROUTER_KEY` adds [Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe) and `FASTINO_API_KEY` adds GLiDE. Jev got the labeller's definition of each level, and was asked for the effort directly, both as a choice among the five levels and as a score on the ordered scale. A third run put Jev's answers to the router's own task and signal questions through the score's weights.
+`just bench` scores the trained adapter against other decision models on the same 972 held-out prompts, without retraining, sending each prompt's first 2,000 characters to the provider. `just bench clef` adds [Clef-flash](https://huggingface.co/Cloudflare/clef-flash), Cloudflare's open 9B decision model, run by [`scripts/clef.py`](scripts/clef.py) on your NVIDIA GPU (or `TUNE_HOST`'s), so the prompts stay on your machines; the first run downloads 19 GB of weights. Clef reads whole prompts, up to 8,192 tokens (about 32,000 characters; its 16,384 overflow a 16 GB card), where the adapter gets the 2,000 characters the router sends it. The classifier daemon on that machine stops for the run and restarts after: Clef and a long prompt fill a 16 GB card on their own. `OPENROUTER_KEY` adds [Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe) and `FASTINO_API_KEY` adds GLiDE. Jev got the labeller's definition of each level, and was asked for the effort directly, both as a choice among the five levels and as a score on the ordered scale. A third run put Jev's answers to the router's own task and signal questions through the score's weights.
 
 | | Matches label | Mean levels off |
 |---|---|---|
