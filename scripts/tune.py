@@ -334,7 +334,7 @@ def clef(test):
     """Clef-flash's answers on the held-out prompts, from scripts/clef.py on this machine's GPU. Its own environment
     (gliner2 pins an older transformers) and process, so its VRAM is free again before the adapters load. It reads
     whole prompts, where GLiNER gets 2000 characters (its DeBERTa encoder was trained on 512 tokens): scripts/clef.py
-    cuts each to 8,192 tokens, about 32,000 characters, at up to 2 seconds a prompt."""
+    cuts each to 8,192 tokens, about 32,000 characters, at a median 0.5 s a prompt (1,025 took 22 minutes)."""
     job, out = WORK / "clef.in.json", WORK / "clef.json"
     gliner = lambda cmd: subprocess.run([ROOT / "scripts/gliner.sh", cmd], capture_output=True).returncode == 0  # noqa: E731
     # Clef's 11 GB, a long prompt's activations and the live daemon outgrow a 16 GB card, which then spills to system

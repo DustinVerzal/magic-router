@@ -228,18 +228,31 @@ With an adapter installed, the daemon answers effort and model from it, which ad
 <summary><b>Against other decision models</b>: <code>just bench</code></summary>
 <br>
 
-`just bench` scores the trained adapter against other decision models on the same 972 held-out prompts, without retraining, sending each prompt's first 2,000 characters to the provider. `just bench clef` adds [Clef-flash](https://huggingface.co/Cloudflare/clef-flash), Cloudflare's open 9B decision model, run by [`scripts/clef.py`](scripts/clef.py) on your NVIDIA GPU (or `TUNE_HOST`'s), so the prompts stay on your machines; the first run downloads 19 GB of weights. Clef reads whole prompts, up to 8,192 tokens (about 32,000 characters; its 16,384 overflow a 16 GB card), where the adapter gets the 2,000 characters the router sends it. The classifier daemon on that machine stops for the run and restarts after: Clef and a long prompt fill a 16 GB card on their own. `OPENROUTER_KEY` adds [Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe) and `FASTINO_API_KEY` adds GLiDE. Jev got the labeller's definition of each level, and was asked for the effort directly, both as a choice among the five levels and as a score on the ordered scale. A third run put Jev's answers to the router's own task and signal questions through the score's weights.
+`just bench` scores the trained adapter against other decision models on the same held-out prompts, without retraining, sending each prompt's first 2,000 characters to the provider. `just bench clef` adds [Clef-flash](https://huggingface.co/Cloudflare/clef-flash), Cloudflare's open 9B decision model, run by [`scripts/clef.py`](scripts/clef.py) on your NVIDIA GPU (or `TUNE_HOST`'s), so the prompts stay on your machines; the first run downloads 19 GB of weights. Clef reads whole prompts, up to 8,192 tokens (about 32,000 characters; its 16,384 overflow a 16 GB card), where the adapter gets the 2,000 characters the router sends it. The classifier daemon on that machine stops for the run and restarts after: Clef and a long prompt fill a 16 GB card on their own. `OPENROUTER_KEY` adds [Jev](https://openrouter.ai/typesafe/jev-1.13) (TypeSafe) and `FASTINO_API_KEY` adds GLiDE. Each was given the labeller's definition of every level, and asked for the effort directly, both as a choice among the five levels and as a score on the ordered scale. A third run put its answers to the router's own task and signal questions through the score's weights. On 1,025 held-out prompts:
 
 | | Matches label | Mean levels off |
 |---|---|---|
-| Tuned adapter | **66%** | **0.36** |
-| Jev, effort as a score | 63% | 0.42 |
-| Jev, effort as a choice | 56% | 0.53 |
-| Always `medium` | 44% | 0.59 |
-| The default score | 40% | 0.69 |
-| Jev through the score's weights | 27% | 1.06 |
+| Tuned adapter | **66%** | **0.35** |
+| Clef, effort as a score | 60% | 0.43 |
+| Jev, effort as a score | 57% | 0.48 |
+| Jev, effort as a choice | 48% | 0.62 |
+| Always `high` | 46% | 0.64 |
+| The default score | 40% | 0.68 |
+| Clef, effort as a choice | 36% | 0.77 |
+| Jev through the score's weights | 27% | 1.07 |
+| Clef through the score's weights | 22% | 1.01 |
 
-Asked directly, Jev comes within 3 points of the adapter without seeing any of your prompts. The adapter stays ahead, though it was trained on labels from the same labeller, so the margin favours it. It also runs locally, while Jev is a hosted call (median 234 ms, $0.049 for all 972 prompts) that sends your prompts to a third party. Through the score's weights Jev does worse than always guessing `medium`, because those weights were set for GLiNER, so it can't drop into the router as is.
+Each was also asked which model a session opening with the prompt should run on, scored on the first prompts of 380 held-out sessions (217 labelled Opus):
+
+| | Matches label |
+|---|---|
+| Tuned adapter | **80%** |
+| Clef | 74% |
+| Jev | 63% |
+| Always Opus | 57% |
+| The default score | 53% |
+
+Clef comes closest without seeing any of your prompts, 6 points behind the adapter on both, though the adapter was trained on labels from the same labeller, so the margin favours it. As a choice it rarely says `high` (9% of prompts, against 46% of labels), so ask it for a score. It isn't a drop-in classifier either: it holds 11 GB of VRAM where the daemon holds about 3 GB, and took a median 0.5 s a prompt on an RTX 4080, with 4 of the 1,025 taking about 3 minutes each, probably long ones spilling out of VRAM. Jev is a hosted call (median 234 ms, about 5 cents per thousand prompts) that sends your prompts to a third party. Through the score's weights both do worse than always guessing `high`, because those weights were set for GLiNER, so neither can drop into the router as is.
 
 </details>
 

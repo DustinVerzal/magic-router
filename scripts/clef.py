@@ -9,8 +9,8 @@
 
 in.json is {"questions": {SystemOne questions}, "texts": [...]}; out.json gets one {"answers", "ms"} per text.
 Its own environment, since gliner2 and Clef want different transformers; the first run downloads 19 GB of weights.
-CLEF_BITS picks the precision: 8 (the default: 11 GB of VRAM, about 0.2 s a prompt on an RTX 4080), 4 (8 GB and
-0.13 s, but it moved effort probabilities by up to 0.23 from 8 bits' and changed 2 of 10 answers in a spot check)
+CLEF_BITS picks the precision: 8 (the default: 11 GB of VRAM, a median 0.5 s a prompt on an RTX 4080), 4 (8 GB and
+a third faster, but it moved effort probabilities by up to 0.23 from 8 bits' and changed 2 of 10 answers in a spot check)
 or 16 (bf16, as Cloudflare serves it, about 20 GB). Torchvision and Pillow are there only because the processor
 Cloudflare's loader builds wants them; flash-linear-attention made no difference on short prompts, so it's left out.
 """
@@ -42,7 +42,8 @@ print(f"loaded Clef-flash at {BITS} bits in {time.perf_counter() - t:.0f}s, "
       f"{torch.cuda.memory_allocated() / 2**30:.1f} GB on the GPU", flush=True)
 
 # A prompt's tail is cut so it and the questions fit this many tokens, about 32,000 characters. Clef takes 16,384, but
-# on a 16 GB card at 8 bits a prompt that long spills out of VRAM (8 minutes, where 8,192 tokens take 2 seconds).
+# on a 16 GB card at 8 bits a prompt that long spills out of VRAM (8 minutes, where 8,192 tokens took 2 seconds).
+# ponytail: 4 of 1,025 bench prompts still took about 3 minutes each, probably spilling too; lower this if a run crawls.
 TOKENS = 8192
 job = json.loads(Path(sys.argv[1]).read_text())
 out = []
